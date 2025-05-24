@@ -5,5 +5,8 @@ class Node {
     this.next = null;
   }
 }
+
+foo(); // not defined
+
 let n = new Node(10);
 console.log(n);
