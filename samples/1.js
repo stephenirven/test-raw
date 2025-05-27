@@ -11,7 +11,7 @@ const max = 5;
 const n = new Node(5);
 let current = n;
 
-for(let i=0;i < 5;i++){
+for(let i = 0;i < 5; i++){
   current.next = new Node(i);
   current = current.next;
 }
