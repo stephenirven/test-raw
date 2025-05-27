@@ -6,7 +6,14 @@ class Node {
   }
 }
 
-foo(); // not defined
+const max = 5;
 
-let n = new Node(10);
+const n = new Node(5);
+let current = n;
+
+for(let i=0;i<max-1;i++){
+  current.next = new Node(i);
+  current = current.next;
+}
+
 console.log(n);
