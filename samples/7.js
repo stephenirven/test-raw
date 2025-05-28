@@ -12,6 +12,7 @@ console.table(n);
 console.log(n);
 console.log(JSON.stringify(n));
 console.log(Object.id(n));
+console.log(Object.id(l));
 for(let key of Object.keys(n)){
   console.log(key + " - " + n[key]);
 }
