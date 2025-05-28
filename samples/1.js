@@ -6,14 +6,22 @@ class Node {
   }
 }
 
+function foo(){
+  const hello = "hello";
+  for(let i=0;i< 5;i++){
+    hello += "-"+i
+  }
+  console.log(hello);  
+}
 const max = 5;
 
 const n = new Node(5);
+
+console.log(n);
+console.log(n.uniqueId);
 let current = n;
 
 for(let i = 0;i < 5; i++){
   current.next = new Node(i);
   current = current.next;
 }
-
-console.log(n);
