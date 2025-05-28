@@ -18,7 +18,7 @@ const max = 5;
 const n = new Node(5);
 
 console.log(n);
-console.log(n.uniqueId);
+console.log(n.id);
 let current = n;
 
 for(let i = 0;i < 5; i++){
