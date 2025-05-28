@@ -5,6 +5,7 @@ class Node(){
   }
 }
 
+const l = new Node(1);
 const n = new Node(10);
 
 console.table(n);
