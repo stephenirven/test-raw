@@ -24,7 +24,7 @@ class Fode {
 }
 
 const f = new Fode("boo");
-let current = f;
+current = f;
 for(let i = 0;i < 5; i++){
   current.next = new Fode(i);
   current = current.next;
