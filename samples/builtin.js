@@ -20,15 +20,17 @@ const bigint = BigInt(9007199254740991);
 
 // BigInt64Array
 
-const bigint64Array = new BigInt64Array(buffer);
-bigint64Array[0] = 5886014448488689n;
-bigint64Array[1] = 1881938909131133n;
-bigint64Array[2] = 1898875537769492n;
+//123n not supported
+
+// const bigint64Array = new BigInt64Array(buffer);
+// bigint64Array[0] = 5886014448488689n;
+// bigint64Array[1] = 1881938909131133n;
+// bigint64Array[2] = 1898875537769492n;
 
 // BigUint64Array
 
 const biguint64Array = new BigUint64Array(2);
-biguint64Array[0] = 42n;
+// biguint64Array[0] = 42n;
 
 // Boolean
 
