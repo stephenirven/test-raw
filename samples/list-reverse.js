@@ -11,6 +11,7 @@ n.next.next = new Node(3)
 n.next.next.next = new Node(4);
 
 let current = n;
+let prev = null;
 
 while (current != null) {
   const next = current.next;
