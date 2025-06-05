@@ -25,38 +25,34 @@
   <body class="bg-gray-50">
     <main>
       <button class="btn" id="parseButton" onclick="parseButton()">
-            <img
-              src="./debug-restart.svg"
-              width="20"
-              height="20"
-              alt="Linear data structures"
-            />
-            Parse
-          </button>
+        <img
+          src="./debug-restart.svg"
+          width="20"
+          height="20"
+          alt="Linear data structures"
+        />
+        Parse
+      </button>
 
-          <button
-            class="btn btn-success"
-            id="stepButton"
-            onclick="stepButton()"
-          >
-            <img
-              src="./debug-step.svg"
-              width="20"
-              height="20"
-              alt="Step forward"
-            />
-            Step
-          </button>
+      <button class="btn btn-success" id="stepButton" onclick="stepButton()">
+        <img
+          src="./debug-step.svg"
+          width="20"
+          height="20"
+          alt="Step forward"
+        />
+        Step
+      </button>
       <div class="grid grid-cols-3 gap-3">
-        <div>           
+        <div>
           <pre id="error"></pre>
           <pre
             id="code-wrapper"
             class="line-numbers"
-            onclick="stepButton()">
-            <code id="code-source" class="language-javascript">
+            onclick="stepButton()"
+          ><code id="code-source" class="language-javascript">
             </code>
-          </pre>         
+            </pre>
         </div>
         <div class="col-span-2">
           <div id="visualisation"></div>
