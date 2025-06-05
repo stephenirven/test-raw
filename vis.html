@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Code runner</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@5"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link href="./app.css" rel="stylesheet" type="text/css" />
+    <script src="./acorn.js"></script>
+    <script src="./interpreter.js"></script>
+    <link href="./prism.css" rel="stylesheet" />
+    <script src="./prism.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/source-map@0.7.3/dist/source-map.js"></script>
+    <script src="https://unpkg.com/d3@7.9.0/dist/d3.min.js"></script>
+    <script src="https://unpkg.com/@hpcc-js/wasm@2.22.4/dist/index.umd.js"></script>
+    <script src="https://unpkg.com/d3-graphviz@5.6.0/build/d3-graphviz.js"></script>
+    <script src="./app.js"></script>
+  </head>
+  <body class="bg-gray-50">
+    <main>
+      <div class="grid grid-cols-3 gap-3">
+        <div>
+          <pre id="error"></pre>
+          <pre
+            id="code-wrapper"
+            class="line-numbers"
+            onclick="stepButton()"
+          ><code id="code-source" class="language-javascript">
+      </code>
+    </pre>
+          <button class="btn" id="parseButton" onclick="parseButton()">
+            <img
+              src="./icons/debug-restart.svg"
+              width="20"
+              height="20"
+              alt="Linear data structures"
+            />
+            Parse
+          </button>
+
+          <button
+            class="btn btn-success"
+            id="stepButton"
+            onclick="stepButton()"
+          >
+            <img
+              src="./icons/debug-step.svg"
+              width="20"
+              height="20"
+              alt="Step forward"
+            />
+            Step
+          </button>
+        </div>
+        <div class="col-span-2">
+          <div id="visualisation"></div>
+          <pre id="err"></pre>
+        </div>
+      </div>
+    </main>
+    <script>
+      disable("disabled");
+    </script>
+  </body>
+</html>
