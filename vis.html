@@ -24,9 +24,7 @@
   </head>
   <body class="bg-gray-50">
     <main>
-      <div class="grid grid-cols-3 gap-3">
-        <div>
-           <button class="btn" id="parseButton" onclick="parseButton()">
+      <button class="btn" id="parseButton" onclick="parseButton()">
             <img
               src="./debug-restart.svg"
               width="20"
@@ -49,12 +47,13 @@
             />
             Step
           </button>
+      <div class="grid grid-cols-3 gap-3">
+        <div>           
           <pre id="error"></pre>
           <pre
             id="code-wrapper"
             class="line-numbers"
-            onclick="stepButton()"
->
+            onclick="stepButton()">
             <code id="code-source" class="language-javascript">
             </code>
           </pre>         
