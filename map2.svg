@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="2.4595132mm"
+   height="1.7646257mm"
+   viewBox="0 0 2.4595132 1.7646257"
+   version="1.1"
+   id="svg5"
+   inkscape:version="1.1.2 (b8e25be8, 2022-02-05)"
+   sodipodi:docname="map2.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="22.627417"
+     inkscape:cx="2.6737475"
+     inkscape:cy="8.1980193"
+     inkscape:window-width="1312"
+     inkscape:window-height="1011"
+     inkscape:window-x="1159"
+     inkscape:window-y="294"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs2">
+    <linearGradient
+       id="linearGradient7994"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="0"
+         id="stop7992" />
+    </linearGradient>
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-30.444835,-48.082463)"
+     style="display:inline">
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:1.14384px;line-height:1.25;font-family:sans-serif;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.428937"
+       x="22.94463"
+       y="64.599945"
+       id="text22293"
+       transform="scale(1.3262049,0.7540313)"><tspan
+         sodipodi:role="line"
+         id="tspan22291"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:1.14384px;font-family:Arial;-inkscape-font-specification:Arial;stroke-width:0.428937"
+         x="22.94463"
+         y="64.599945">#</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:1.14384px;line-height:1.25;font-family:sans-serif;display:inline;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.428937"
+       x="22.94463"
+       y="66.093491"
+       id="text22293-0"
+       transform="scale(1.3262049,0.7540313)"><tspan
+         sodipodi:role="line"
+         id="tspan22291-4"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:1.14384px;font-family:Arial;-inkscape-font-specification:Arial;stroke-width:0.428937"
+         x="22.94463"
+         y="66.093491">#</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:0.705556px;line-height:1.25;font-family:sans-serif;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583"
+       x="31.692019"
+       y="48.710381"
+       id="text55422"><tspan
+         sodipodi:role="line"
+         id="tspan55420"
+         style="font-size:0.705556px;stroke-width:0.264583"
+         x="31.692019"
+         y="48.710381">abc</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:0.705556px;line-height:1.25;font-family:sans-serif;display:inline;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583"
+       x="31.692019"
+       y="49.836559"
+       id="text55422-6"><tspan
+         sodipodi:role="line"
+         id="tspan55420-1"
+         style="font-size:0.705556px;stroke-width:0.264583"
+         x="31.692019"
+         y="49.836559">12</tspan></text>
+  </g>
+</svg>
