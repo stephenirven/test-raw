@@ -12,7 +12,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link href="./app.css" rel="stylesheet" type="text/css" />
     <script src="./acorn.js"></script>
-    <script src="./interpreter.js"></script>
+    <script src="./interpreter-mod.js"></script>
     <link href="./prism.css" rel="stylesheet" />
     <script src="./prism.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -20,13 +20,13 @@
     <script src="https://unpkg.com/d3@7.9.0/dist/d3.min.js"></script>
     <script src="https://unpkg.com/@hpcc-js/wasm@2.22.4/dist/index.umd.js"></script>
     <script src="https://unpkg.com/d3-graphviz@5.6.0/build/d3-graphviz.js"></script>
-    <script src="./app.js"></script>
+    <script src="./app.js" defer></script>
   </head>
   <body class="bg-gray-50">
     <main>
       <button class="btn" id="parseButton" onclick="parseButton()">
         <img
-          src="./debug-restart.svg"
+          src="./icons/debug-restart.svg"
           width="20"
           height="20"
           alt="Linear data structures"
@@ -36,16 +36,16 @@
 
       <button class="btn btn-success" id="stepButton" onclick="stepButton()">
         <img
-          src="./debug-step.svg"
+          src="./icons/debug-step.svg"
           width="20"
           height="20"
           alt="Step forward"
+          disabled
         />
         Step
       </button>
       <div class="grid grid-cols-3 gap-3">
         <div>
-          <pre id="error"></pre>
           <pre
             id="code-wrapper"
             class="line-numbers"
@@ -53,15 +53,12 @@
           ><code id="code-source" class="language-javascript">
             </code>
             </pre>
+          <pre id="status"></pre>
         </div>
         <div class="col-span-2">
           <div id="visualisation"></div>
-          <pre id="err"></pre>
         </div>
       </div>
     </main>
-    <script>
-      disable("disabled");
-    </script>
   </body>
 </html>
