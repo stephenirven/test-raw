@@ -20,10 +20,8 @@ const config = {
   prefixes: [
     // Polyfill for maps, sets & weakmaps https://github.com/anonyco/Javascript-Fast-Light-Map-WeakMap-Set-And-WeakSet-JS-Polyfill/tree/master
     `"undefined"!=typeof Map&&Map.prototype.keys&&"undefined"!=typeof Set&&Set.prototype.keys||function(){"use-strict";function t(t,e){if(e===e)return t.indexOf(e);for(i=0,n=t.length;t[i]===t[i]&&++i!==n;);return i}var e,i,n,r,s,o,h={"delete":function(i){return e=t(this.k,i),~e?(this.k.splice(e,1),this.v.splice(e,1),--this.size,!0):!1},get:function(e){return this.v[t(this.k,e)]},set:function(i,n){return e=t(this.k,i),~e||(this.k[e=this.size++]=i),this.v[e]=n,this},has:function(e){return t(this.k,e)>-1},clear:function(){this.k.length=this.v.length=this.size=0},forEach:function(t,e){e&&(t=t.bind(e));for(var i=-1,n=this.size;++i!==n;)t(this.v[i],this.k[i],this)},entries:function(){var t=0,e=this;return{next:function(){return t!==e.size?{value:[e.k[t++],e.v[t]],done:!1}:{done:!0}}}},keys:function(){var t=0,e=this;return{next:function(){return t!==e.size?{value:e.k[t++],done:!1}:{done:!0}}}},values:function(){var t=0,e=this;return{next:function(){return t!==e.size?{value:e.v[t++],done:!1}:{done:!0}}}},toString:function(){return"[object Map]"}};WeakMap=Map=function(e){if(r=this.k=[],s=this.v=[],n=0,void 0!==e&&null!==e){if(o=Object(e),i=+o.length,i!=i)throw new TypeError("("+(e.toString||o.toString)()+") is not iterable");for(;i--;){if(!(o[i]instanceof Object))throw new TypeError("Iterator value "+o[i]+" is not an entry object");~t(r,o[i][0])||(r[n]=o[i][0],s[n++]=o[i][1])}r.reverse(),s.reverse()}this.size=n},Map.prototype=h,WeakSet=Set=function(e){if(r=this.k=this.v=[],n=0,void 0!==e&&null!==e){if(o=Object(e),i=+o.length,i!=i)throw new TypeError("("+(e.toString||o.toString)()+") is not iterable");for(;i--;)~t(r,o[i])||(r[n++]=o[i]);r.reverse()}this.size=n},Set.prototype={"delete":function(i){return e=t(this.k,i),~e?(this.k.splice(e,1),--this.size,!0):!1},add:function(i){return e=t(this.k,i),~e||(e=this.size++),this.k[e]=i,this},has:h.has,clear:h.clear,forEach:h.forEach,entries:h.entries,keys:h.keys,values:h.keys,toString:function(){return"[object Set]"}}}();`,
-    // object uniqueId - used to help map to specific objects when serialising variables https://stackoverflow.com/questions/1997661/unique-object-identifier-in-javascript
-    `(function(){if(typeof Object.id!="undefined")return;var id=0;Object.id=function(o){if(typeof o.__uniqueid!="undefined"){return o.__uniqueid;}Object.defineProperty(o,"__uniqueid",{value:++id,enumerable:false,writable:false});return o.__uniqueid;};})();`,
   ],
-  postfixes: [],
+  //  postfixes: [], // @TODO amend step function to make sure we don't trigger on ay postfix code.
   classReg:
     /(?:var[\s]+)(?<name>[\p{L}_$]+[\p{L}_$0-9]*).*__PURE__.*_createClass/gu,
   colorWheel: [
@@ -173,6 +171,7 @@ class StateManager {
         end: { line: null, column: null },
       },
     };
+    this.prefixLength = 0;
 
     this.elements = {
       code_wrapper: document.getElementById("code-wrapper"),
@@ -234,8 +233,11 @@ class StateManager {
 
     // prefix the code for any polyfills etc. Must not contain linefeeds to prevent misaligned line numbers
 
+    const prefixCode = config.prefixes.join("");
+    this.prefixLength = prefixCode.length;
+
     this.interpreter = new Interpreter(
-      config.prefixes.join("") + this.transpile.code,
+      prefixCode + this.transpile.code,
       (interpreter, globalObject) => {
         const nativeFunctions = {
           alert: function (text) {
@@ -285,7 +287,7 @@ class StateManager {
     );
 
     // append any code after the snippet
-    this.interpreter.appendCode(config.postfixes.join(""));
+    //this.interpreter.appendCode(config.postfixes.join(""));
   }
 
   updateSourceLines({ start, end }) {
@@ -381,12 +383,6 @@ class StateManager {
 const state = new StateManager();
 
 // state.getSample(`
-//   const f = [1,2,3];
-
-//   console.table(f);
-//   const g = [[1,2,3],[4,5,6]];
-
-//   console.table(g);
 //   const h = [
 //   [1,2,3,4,5,6,7,8,9],
 //   [1,2,3,4,5,6,7,8,9],
@@ -396,8 +392,12 @@ const state = new StateManager();
 //   [1,2,3,4,5,6,7,8,9],
 //   [1,2,3,4,5,6,7,8,9],
 //   [1,2,3,4,5,6,7,8,9],
-//   ]
-//   console.table(h)
+//   ];
+
+// // /  const d = h[3];
+
+//   console.table(h);
+//   //console.log(d)
 // `);
 
 state.getSample(
@@ -457,15 +457,6 @@ function stepButton() {
     state.updateSourceLines({ start: node.loc.start, end: node.loc.end });
   }
 
-  // console.log("Success!");
-
-  // console.log("ok", ok);
-  // console.log("status", state.interpreter.getStatus());
-  // console.log("locations", state.locations);
-  // console.log("valid", state.sourceLinesValid());
-  // console.log("changed", state.sourceLinesChanged());
-  // console.log("line", isLine(stack));
-
   if (ok) {
     const status = Object.keys(Interpreter.Status).find(
       (key) => Interpreter.Status[key] === state.interpreter.getStatus()
@@ -494,6 +485,11 @@ function isLine(stack) {
   var currentState = stack[stack.length - 1];
   var node = currentState.node;
   var type = node.type;
+
+  // If the code is in the prefix, ignore it
+  if (node.loc.end.line == 1 && node.loc.end.column < state.prefixLength) {
+    return false;
+  }
 
   if (
     stack.filter((frame) => {
