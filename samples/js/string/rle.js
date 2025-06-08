@@ -1,6 +1,6 @@
 // Run length encoding using two pointers
 
-const input = new String("ABBA BAABA MAAL AARON PAUL");
+const input = new String("ABBBBBBBA BAAAAABA");
 const encoded = rle(input)
 
 console.log(encoded);
