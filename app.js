@@ -358,7 +358,6 @@ class StateManager {
   display(regardless = false) {
     if (regardless || this.variables.hasChanges) {
       const dot = visualizeDot(this.variables.current);
-      console.log(dot);
       var graphviz = d3
         .select("#visualisation")
         .graphviz()
@@ -368,9 +367,7 @@ class StateManager {
         .on("initEnd", render);
 
       function render() {
-        console.time("graph");
         graphviz.renderDot(dot);
-        console.timeEnd("graph");
         disable("");
       }
     }
@@ -387,7 +384,7 @@ class StateManager {
 const state = new StateManager();
 
 state.getSample(
-  "https://raw.githubusercontent.com/stephenirven/test-raw/refs/heads/main/samples/js/linked-list/reverse.js"
+  "https://raw.githubusercontent.com/stephenirven/test-raw/refs/heads/main/samples/js/string/rle.js"
 );
 
 async function parseButton() {
@@ -711,7 +708,10 @@ function toDot(id, currentObject, variables) {
   const labels = [];
   switch (type) {
     case "Function":
-      const bodyText = DotEscapeString(getBodyText(currentObject));
+      let bodyText = DotEscapeString(getBodyText(currentObject));
+      if (bodyText.length > 15) {
+        bodyText = bodyText.substring(0, 12) + "...";
+      }
       labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
       labels.push(
         `<TR><TD>${DotEscapeString(
@@ -724,6 +724,20 @@ function toDot(id, currentObject, variables) {
       attrs.push(`label=<${labels.join("")}>`);
       break;
     case "String":
+      labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
+
+      const header = [`<TD>${type}</TD>`];
+      const cols = [`<TD></TD>`];
+      for (let i = 0; i < currentObject.length; i++) {
+        header.push(`<TD>${i}</TD>`);
+        cols.push(`<TD PORT="${i}">${currentObject[i]}</TD>`);
+      }
+
+      labels.push(`<TR>${header.join("")}</TR>`);
+      labels.push(`<TR>${cols.join("")}</TR>`);
+      labels.push(`</TABLE>`);
+      attrs.push(`label=<${labels.join("")}>`);
+      break;
     case "RegExp":
     case "Error":
       labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
@@ -912,6 +926,23 @@ function visualizeDot({ objects, twoDrows, variables }) {
           val ? val.toString() : val
         }" tooltip="${displayTooltip}"]`
       );
+      // Cater for string pointers
+      if (Number.isInteger(val) && val >= 0) {
+        const [stringName, ...rest] = displayName.split(/_(.*)/s);
+        if (
+          variables.has(stringName) &&
+          variables.get(stringName) instanceof ObjectPointer &&
+          objects.has(variables.get(stringName).id) &&
+          objects.get(variables.get(stringName).id) instanceof String &&
+          val < objects.get(variables.get(stringName).id).length
+        ) {
+          rels.push(
+            `"${displayName}":e -> ${
+              objects.get(variables.get(stringName).id).__uniqueid
+            }:${val}`
+          );
+        }
+      }
     }
   });
 
