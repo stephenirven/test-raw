@@ -94,10 +94,12 @@ class VariableStore {
     this.prev = {
       objects: new Map(),
       variables: new Map(),
+      twoDrows: new Map(),
     };
     this.current = {
       objects: new Map(),
       variables: new Map(),
+      twoDrows: new Map(),
     };
 
     this.reset = this.reset.bind(this);
@@ -107,10 +109,12 @@ class VariableStore {
     this.prev = {
       objects: new Map(),
       variables: new Map(),
+      twoDrows: new Map(),
     };
     this.current = {
       objects: new Map(),
       variables: new Map(),
+      twoDrows: new Map(),
     };
   }
 
@@ -354,7 +358,7 @@ class StateManager {
   display(regardless = false) {
     if (regardless || this.variables.hasChanges) {
       const dot = visualizeDot(this.variables.current);
-
+      console.log(dot);
       var graphviz = d3
         .select("#visualisation")
         .graphviz()
@@ -381,24 +385,6 @@ class StateManager {
 }
 
 const state = new StateManager();
-
-// state.getSample(`
-//   const h = [
-//   [1,2,3,4,5,6,7,8,9],
-//   [1,2,3,4,5,6,7,8,9],
-//   [1,2,3,4,5,6,7,8,9],
-//   [1,2,3,4,5,6,7,8,9],
-//   [1,2,3,4,5,6,7,8,9],
-//   [1,2,3,4,5,6,7,8,9],
-//   [1,2,3,4,5,6,7,8,9],
-//   [1,2,3,4,5,6,7,8,9],
-//   ];
-
-// // /  const d = h[3];
-
-//   console.table(h);
-//   //console.log(d)
-// `);
 
 state.getSample(
   "https://raw.githubusercontent.com/stephenirven/test-raw/refs/heads/main/samples/js/linked-list/reverse.js"
@@ -581,7 +567,7 @@ function buildObjects(input, skipTypes, skipNames) {
     return;
   }
 
-  const twoDrows = [];
+  const twoDrows = new Map();
   const nativeObjects = new Map();
 
   for (let key of Object.keys(input.properties)) {
@@ -607,8 +593,9 @@ function buildObjects(input, skipTypes, skipNames) {
         const id = obj.__uniqueid;
         if (!nativeObjects.has(id)) {
           if (is2DRectArray(obj)) {
-            for (let row of obj) {
-              twoDrows.push(row.__uniqueid);
+            for (let row in obj) {
+              // We have special rendering for two dimensional arrays
+              twoDrows.set(obj[row].__uniqueid, `${id}:${row}`);
             }
           }
           nativeObjects.set(id, obj);
@@ -617,13 +604,7 @@ function buildObjects(input, skipTypes, skipNames) {
     }
   }
 
-  for (let id of twoDrows) {
-    if (nativeObjects.has(id)) {
-      nativeObjects.delete(id);
-    }
-  }
-
-  return nativeObjects;
+  return { objects: nativeObjects, twoDrows: twoDrows };
 }
 
 function GetRange(text, start, end) {
@@ -674,7 +655,7 @@ function getVariables(scopeObj) {
 
   // const n = state.interpreter.getValueFromScope("n"); // TODO - Add traces for specific variables
 
-  const objects = buildObjects(scopeObj, skipTypes, skipNames);
+  const { objects, twoDrows } = buildObjects(scopeObj, skipTypes, skipNames);
 
   for (let key of Object.keys(scopeObj.properties)) {
     if (skipNames.has(key)) continue;
@@ -692,7 +673,7 @@ function getVariables(scopeObj) {
     }
   }
 
-  return { objects: objects, variables: variables };
+  return { objects: objects, twoDrows: twoDrows, variables: variables };
 }
 
 function DeepEqual(x, y) {
@@ -901,7 +882,7 @@ function toDot(id, currentObject, variables) {
   };
 }
 
-function visualizeDot({ objects, variables }) {
+function visualizeDot({ objects, twoDrows, variables }) {
   const objs = [];
   const rels = [];
   const styles = [];
@@ -920,7 +901,11 @@ function visualizeDot({ objects, variables }) {
       objs.push(
         `"${displayName}"[shape="signature" color="${color}" label="${displayName}" tooltip="${displayTooltip}"]`
       );
-      rels.push(`"${displayName}":e -> ${id}`);
+      if (twoDrows.has(id)) {
+        rels.push(`"${displayName}":e -> ${twoDrows.get(id)}`);
+      } else {
+        rels.push(`"${displayName}":e -> ${id}`);
+      }
     } else {
       objs.push(
         `"${displayName}"[shape="signature" color="${color}" label="${displayName}: ${
@@ -931,6 +916,9 @@ function visualizeDot({ objects, variables }) {
   });
 
   objects.keys().forEach((id) => {
+    if (twoDrows.has(id)) {
+      return; // don't include objects that are already rendered in a 2d graph
+    }
     const currentObject = objects.get(id);
 
     const objVariables = objVars.has(id) ? Array.from(objVars.get(id)) : [];
