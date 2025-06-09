@@ -3343,6 +3343,8 @@ Interpreter.prototype.pseudoToNative = function (
   var nativeObj = this.isa(pseudoObj, this.ARRAY) ? [] : {};
   if (add_unique) {
     nativeObj.__uniqueid = Object.id(pseudoObj); // ADDED to support unique object IDs
+    nativeObj.__constructorName =
+      pseudoObj.proto?.properties?.constructor?.node?.id?.name;
   }
 
   cycles.native.push(nativeObj);
