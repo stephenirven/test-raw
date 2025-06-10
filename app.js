@@ -1134,9 +1134,15 @@ function visualizeDot({ objects, enclosed, variables }) {
         `"${displayName}"[shape="signature" color="${color}" label="${displayName}" tooltip="${displayTooltip}"]`
       );
       if (enclosed.has(id)) {
-        rels.push(`"${displayName}":e -> ${enclosed.get(id)}`);
+        rels.push(
+          `"${displayName}":e -> "${enclosed.get(
+            id
+          )}" [color="${color}" constraint=false]`
+        );
       } else {
-        rels.push(`"${displayName}":e -> ${id}`);
+        rels.push(
+          `"${displayName}":e -> "${id}" [color="${color}" constraint=false]`
+        );
       }
     } else {
       objs.push(
@@ -1157,7 +1163,7 @@ function visualizeDot({ objects, enclosed, variables }) {
           rels.push(
             `"${displayName}":e -> ${
               objects.get(variables.get(stringName).id).__uniqueid
-            }:${val}`
+            }:${val} [color="${color}" constraint=false]`
           );
         }
       }
