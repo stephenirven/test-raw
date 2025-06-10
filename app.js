@@ -365,7 +365,7 @@ class StateManager {
 
   display(regardless = false) {
     if (regardless || this.variables.hasChanges) {
-      const dot = visualizeDot(this.variables.current, "TB");
+      const dot = visualizeDot(this.variables.current);
       console.log(dot);
       var graphviz = d3
         .select("#visualisation")
@@ -392,55 +392,54 @@ class StateManager {
 
 const state = new StateManager();
 
-// state.getSample(
-//   "https://raw.githubusercontent.com/stephenirven/test-raw/refs/heads/main/samples/js/string/rle.js"
-// );
-state.getSample(`
-class BinaryNode {
-  constructor(val) {
-    this.val = val;
-    this.left = null;
-    this.right = null;
-  }
-}
+state.getSample(
+  "https://raw.githubusercontent.com/stephenirven/test-raw/refs/heads/main/samples/js/string/rle.js"
+);
+// state.getSample(`
+// class BinaryNode {
+//   constructor(val) {
+//     this.val = val;
+//     this.left = null;
+//     this.right = null;
+//   }
+// }
 
-let a = new BinaryNode(10);
-a.left = new BinaryNode(21);
-a.right = new BinaryNode(22);
-a.left.left = new BinaryNode(31);
-a.left.right = new BinaryNode(32);
-a.left.right.right = new BinaryNode(43);
+// let a = new BinaryNode(10);
+// a.left = new BinaryNode(21);
+// a.right = new BinaryNode(22);
+// a.left.left = new BinaryNode(31);
+// a.left.right = new BinaryNode(32);
+// a.left.right.right = new BinaryNode(43);
 
+// function depthFirstIter(root) {
+//   let stack = [root];
+//   let values = [];
 
-function depthFirstIter(root) {
-  let stack = [root];
-  let values = [];
+//   while (stack.length != 0) {
+//     let current = stack.pop();
 
-  while (stack.length != 0) {
-    let current = stack.pop();
+//     values.push(current.val);
+//     if (current.right) stack.push(current.right);
+//     if (current.left) stack.push(current.left);
+//   }
 
-    values.push(current.val);
-    if (current.right) stack.push(current.right);
-    if (current.left) stack.push(current.left);
-  }
+//   return values;
+// }
 
-  return values;
-}
+// function depthFirstRecurse(root, values = []) {
+//   if (root == null) return [];
+//   const leftVals = depthFirstRecurse(root.left);
+//   const rightVals = depthFirstRecurse(root.right);
+//   return [root.val, ...leftVals, ...rightVals];
+// }
 
-function depthFirstRecurse(root, values = []) {
-  if (root == null) return [];
-  const leftVals = depthFirstRecurse(root.left);
-  const rightVals = depthFirstRecurse(root.right);
-  return [root.val, ...leftVals, ...rightVals];
-}
+// const i = depthFirstIter(a);
+// const r = depthFirstRecurse(a);
 
-const i = depthFirstIter(a);
-const r = depthFirstRecurse(a);
+// console.log(i);
+// console.log(r);
 
-console.log(i);
-console.log(r);
-
-`);
+// `);
 
 async function parseButton() {
   state.displayError();
@@ -1051,16 +1050,17 @@ function objToDot(currentObject) {
     labels.push(`</TABLE>`);
     if (currentObject.left != null) {
       relationshipMarkup.push(
-        `"${DotEscapeString(id)}":"left":s -> ${
+        // left / right ports here seem to make layout worse
+        `"${DotEscapeString(id)}" -> ${
           currentObject.left.__uniqueid
-        }:n [color="${color}" fontcolor="${color}" decorate="true" headlabel="left"]`
+        } [color="${color}" fontcolor="${color}" decorate="true" headlabel="left"]`
       );
     }
     if (currentObject.right != null) {
       relationshipMarkup.push(
-        `"${DotEscapeString(id)}":"right":s -> ${
+        `"${DotEscapeString(id)}" -> ${
           currentObject.right.__uniqueid
-        }:n [color="${color}" fontcolor="${color}" decorate="true" headlabel="right"]`
+        } [color="${color}" fontcolor="${color}" decorate="true" headlabel="right"]`
       );
     }
   } else {
@@ -1107,7 +1107,7 @@ function objToDot(currentObject) {
   return { objectMarkup, relationshipMarkup };
 }
 
-function visualizeDot({ objects, twoDrows, variables }, direction = "LR") {
+function visualizeDot({ objects, twoDrows, variables }) {
   const subgraphs = [];
   const objs = [];
   const rels = [];
@@ -1196,7 +1196,7 @@ function visualizeDot({ objects, twoDrows, variables }, direction = "LR") {
   }
   const trees = new Map();
   for (let [key, tree] of binaryTreeNodes) {
-    const gap = 0.5;
+    const gap = 0.1;
     const width = 1;
     const maxTreeHeight = treeHeight(tree);
     const n = new DummyBinaryNode(tree, maxTreeHeight, key);
@@ -1205,6 +1205,7 @@ function visualizeDot({ objects, twoDrows, variables }, direction = "LR") {
     treeLevels(n, 0, levels);
 
     const subgraph = [`subgraph cluster_binarytree_${n.__uniqueid} {`];
+    subgraph.push("peripheries=0;");
 
     for (let levelNum = 0; levelNum < levels.length; levelNum++) {
       const level = levels[levelNum];
@@ -1224,45 +1225,43 @@ function visualizeDot({ objects, twoDrows, variables }, direction = "LR") {
         labels.push(
           `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
         );
-        labels.push(
-          `<TR><TD COLSPAN="2">val : ${DotEscapeString(val)}</TD></TR>`
-        );
+        labels.push(`<TR><TD COLSPAN="2">${DotEscapeString(val)}</TD></TR>`);
         labels.push(
           `<TR><TD PORT="left">left</TD><TD PORT="right">right</TD></TR>`
         );
         labels.push(`</TABLE>`);
         if (node.left != null) {
           const style = !Number.isInteger(node.left.__uniqueid)
-            ? "style=invis"
+            ? "style=invis" // style=invis
             : "";
           relationshipMarkup.push(
-            `"${DotEscapeString(id)}":"left":s -> ${
+            `"${DotEscapeString(id)}":"left" -> ${
               node.left.__uniqueid
-            }:n [color="${color}" fontcolor="${color}" decorate="true" headlabel="left" ${style}]`
+            } [color="${color}" fontcolor="${color}" decorate="true" headlabel="left" ${style}]`
           );
 
           relationshipMarkup.push(
-            `"${DotEscapeString(id)}":s -> "padding-${
+            `"${DotEscapeString(id)}" -> "p-${
               node.left.__uniqueid
-            }":n [style=invis]`
+            }" [style=invis]` // style=invis
           );
 
           paddingNodes.push(
-            `"padding-${node.left.__uniqueid}" [width=${paddingWidth} style=invis]`
+            `"p-${node.left.__uniqueid}" [width=${paddingWidth} style=invis]` // style=invis
           );
         }
 
         if (node.right != null) {
           const style = !Number.isInteger(node.right.__uniqueid)
-            ? "style=invis"
+            ? "style=invis" //style=invis
             : "";
           relationshipMarkup.push(
-            `"${DotEscapeString(id)}":"right":s -> ${
+            `"${DotEscapeString(id)}":"right" -> ${
               node.right.__uniqueid
-            }:n [color="${color}" fontcolor="${color}" decorate="true" headlabel="right" ${style}]`
+            } [color="${color}" fontcolor="${color}" decorate="true" headlabel="right" ${style}]`
           );
           paddingNodes.push(
-            `"padding-${node.right.__uniqueid}" [width=${paddingWidth} style=invis]`
+            `"p-${node.right.__uniqueid}" [width=${0} style=invis]` // style=invis
           );
         }
         attrs.push(`width=1`);
@@ -1271,7 +1270,7 @@ function visualizeDot({ objects, twoDrows, variables }, direction = "LR") {
         attrs.push(`color="${color}"`);
         attrs.push(`fillcolor="${color}"`);
         if (!Number.isInteger(id)) {
-          attrs.push(`style=invis`);
+          attrs.push(`style=invis`); // style=invis
         }
 
         const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
@@ -1284,11 +1283,11 @@ function visualizeDot({ objects, twoDrows, variables }, direction = "LR") {
 
       if (level.length > 1) {
         let levelOrder = level
-          .map((x) => `"${x.__uniqueid}" -> "padding-${x.__uniqueid}"`)
+          .map((x) => `"${x.__uniqueid}" -> "p-${x.__uniqueid}"`)
           .join(" -> ");
-        levelOrder = levelOrder.substring(0, levelOrder.lastIndexOf("->")); // remove last padding right from level order
+        levelOrder = levelOrder.substring(0, levelOrder.lastIndexOf("->")); // remove last padding right
 
-        levelOrder = `{rank=same ${levelOrder} [style=invis]}`;
+        levelOrder = `{rank=same ${levelOrder} [style=invis]}`; // style=invis
 
         console.log("LO", levelOrder);
 
@@ -1301,16 +1300,22 @@ function visualizeDot({ objects, twoDrows, variables }, direction = "LR") {
     subgraphs.push(subgraph.join("\n"));
   }
 
-  console.dir(trees);
+  // trees render better without splines.
+  // ideally we would set this only for the tree subgraphs
+  // but it's a graph level attribute
+  const splines = binaryTreeNodes.size > 0 ? "splines=false;" : "";
+  const rankdir = binaryTreeNodes.size > 0 ? "TB" : "LR";
+
   return `
   digraph structs {
-      nodesep=0.5;
-      ranksep=1;
+      nodesep=0.3; 
+      ranksep=0.2;
       margin="1.5,0.5";
-      rankdir=${direction};
+      rankdir=${rankdir};
       packMode="graph";
       tooltip="state visualisation";
       labeljust=l;
+      ${splines}
 
       node [shape=plaintext ordering="out"];
       edge [arrowhead="none"];
@@ -1335,7 +1340,7 @@ class DummyBinaryNode {
       this.__uniqueid = node.__uniqueid;
       this.val = node.val;
     } else {
-      this.__uniqueid = `dummy_node_${prefix}_${dummyNodeNumbers.length}`;
+      this.__uniqueid = `d_${prefix}_${dummyNodeNumbers.length}`;
       dummyNodeNumbers.push(this.__uniqueid);
     }
 
