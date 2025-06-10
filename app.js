@@ -392,54 +392,59 @@ class StateManager {
 
 const state = new StateManager();
 
-state.getSample(
-  "https://raw.githubusercontent.com/stephenirven/test-raw/refs/heads/main/samples/js/string/rle.js"
-);
-// state.getSample(`
-// class BinaryNode {
-//   constructor(val) {
-//     this.val = val;
-//     this.left = null;
-//     this.right = null;
-//   }
-// }
+// state.getSample(
+//   "https://raw.githubusercontent.com/stephenirven/test-raw/refs/heads/main/samples/js/string/rle.js"
+// );
+state.getSample(`
+class AdjacencyList{} // just an object
 
-// let a = new BinaryNode(10);
-// a.left = new BinaryNode(21);
-// a.right = new BinaryNode(22);
-// a.left.left = new BinaryNode(31);
-// a.left.right = new BinaryNode(32);
-// a.left.right.right = new BinaryNode(43);
+const graph = new AdjacencyList();
+graph.a = ["b", "c"],
+graph.b = ["d"],
+graph.c = ["e"],
+graph.d = [],
+graph.e = ["b"],
+graph.f = ["d"]
 
-// function depthFirstIter(root) {
-//   let stack = [root];
-//   let values = [];
+console.log(graph.constructor.name)
 
-//   while (stack.length != 0) {
-//     let current = stack.pop();
 
-//     values.push(current.val);
-//     if (current.right) stack.push(current.right);
-//     if (current.left) stack.push(current.left);
-//   }
 
-//   return values;
-// }
+a.left = new BinaryNode(21);
+a.right = new BinaryNode(22);
+a.left.left = new BinaryNode(31);
+a.left.right = new BinaryNode(32);
+a.left.right.right = new BinaryNode(43);
 
-// function depthFirstRecurse(root, values = []) {
-//   if (root == null) return [];
-//   const leftVals = depthFirstRecurse(root.left);
-//   const rightVals = depthFirstRecurse(root.right);
-//   return [root.val, ...leftVals, ...rightVals];
-// }
+function depthFirstIter(root) {
+  let stack = [root];
+  let values = [];
 
-// const i = depthFirstIter(a);
-// const r = depthFirstRecurse(a);
+  while (stack.length != 0) {
+    let current = stack.pop();
 
-// console.log(i);
-// console.log(r);
+    values.push(current.val);
+    if (current.right) stack.push(current.right);
+    if (current.left) stack.push(current.left);
+  }
 
-// `);
+  return values;
+}
+
+function depthFirstRecurse(root, values = []) {
+  if (root == null) return [];
+  const leftVals = depthFirstRecurse(root.left);
+  const rightVals = depthFirstRecurse(root.right);
+  return [root.val, ...leftVals, ...rightVals];
+}
+
+const i = depthFirstIter(a);
+const r = depthFirstRecurse(a);
+
+console.log(i);
+console.log(r);
+
+`);
 
 async function parseButton() {
   state.displayError();
@@ -1039,7 +1044,50 @@ function objToDot(currentObject) {
   const attrs = [];
   const type = currentObject.constructor.name;
   const labels = [];
-  if (currentObject.__constructorName == "BinaryNode") {
+  if (currentObject.__constructorName == "AdjacencyList") {
+    const visGraph = [`subgraph cluster_adjacency_list_${id} {`];
+    visGraph.push(`edge [arrowhead="normal"]`);
+    visGraph.push(`node [shape="oval"]`);
+
+    labels.push(
+      `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
+    );
+    labels.push(`<TR><TD COLSPAN="100%">Adjacency list</TD></TR>`);
+
+    const properties = Object.getOwnPropertyNames(currentObject).filter(
+      (x) => x != "__uniqueid" && x != "__constructorName"
+    );
+
+    console.log("properties", properties);
+    for (let property of properties) {
+      const cols = [];
+      for (let adj of currentObject[property]) {
+        visGraph.push(`${property} -> ${adj}`);
+        cols.push(`<TD>${DotEscapeString(adj)}</TD>`);
+      }
+
+      labels.push(
+        `<TR><TD PORT="${DotEscapeString(property)}">${DotEscapeString(
+          property + " ==> "
+        )}</TD>${cols.join("")}</TR>`
+      );
+    }
+
+    labels.push(`</TABLE>`);
+    attrs.push(`label=<${labels.join("")}>`);
+
+    visGraph.push("}");
+    if (properties.length > 0) {
+      relationshipMarkup.push(visGraph.join("\n"));
+      relationshipMarkup.push(
+        `"${DotEscapeString(id)}" -> "${
+          properties[0]
+        }" [ltail="${DotEscapeString(
+          `cluster_adjacency_list_${id}" label="image" style=dashed arrowhead=curve, arrowtail=dot]`
+        )}`
+      );
+    }
+  } else if (currentObject.__constructorName == "BinaryNode") {
     labels.push(
       `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
     );
