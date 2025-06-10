@@ -102,12 +102,12 @@ class VariableStore {
     this.prev = {
       objects: new Map(),
       variables: new Map(),
-      twoDrows: new Map(),
+      enclosed: new Map(),
     };
     this.current = {
       objects: new Map(),
       variables: new Map(),
-      twoDrows: new Map(),
+      enclosed: new Map(),
     };
 
     this.reset = this.reset.bind(this);
@@ -117,12 +117,12 @@ class VariableStore {
     this.prev = {
       objects: new Map(),
       variables: new Map(),
-      twoDrows: new Map(),
+      enclosed: new Map(),
     };
     this.current = {
       objects: new Map(),
       variables: new Map(),
-      twoDrows: new Map(),
+      enclosed: new Map(),
     };
   }
 
@@ -366,7 +366,6 @@ class StateManager {
   display(regardless = false) {
     if (regardless || this.variables.hasChanges) {
       const dot = visualizeDot(this.variables.current);
-      console.log(dot);
       var graphviz = d3
         .select("#visualisation")
         .graphviz()
@@ -392,59 +391,9 @@ class StateManager {
 
 const state = new StateManager();
 
-// state.getSample(
-//   "https://raw.githubusercontent.com/stephenirven/test-raw/refs/heads/main/samples/js/string/rle.js"
-// );
-state.getSample(`
-class AdjacencyList{} // just an object
-
-const graph = new AdjacencyList();
-graph.a = ["b", "c"],
-graph.b = ["d"],
-graph.c = ["e"],
-graph.d = [],
-graph.e = ["b"],
-graph.f = ["d"]
-
-console.log(graph.constructor.name)
-
-
-
-a.left = new BinaryNode(21);
-a.right = new BinaryNode(22);
-a.left.left = new BinaryNode(31);
-a.left.right = new BinaryNode(32);
-a.left.right.right = new BinaryNode(43);
-
-function depthFirstIter(root) {
-  let stack = [root];
-  let values = [];
-
-  while (stack.length != 0) {
-    let current = stack.pop();
-
-    values.push(current.val);
-    if (current.right) stack.push(current.right);
-    if (current.left) stack.push(current.left);
-  }
-
-  return values;
-}
-
-function depthFirstRecurse(root, values = []) {
-  if (root == null) return [];
-  const leftVals = depthFirstRecurse(root.left);
-  const rightVals = depthFirstRecurse(root.right);
-  return [root.val, ...leftVals, ...rightVals];
-}
-
-const i = depthFirstIter(a);
-const r = depthFirstRecurse(a);
-
-console.log(i);
-console.log(r);
-
-`);
+state.getSample(
+  "https://raw.githubusercontent.com/stephenirven/test-raw/refs/heads/main/samples/js/string/rle.js"
+);
 
 async function parseButton() {
   state.displayError();
@@ -623,7 +572,7 @@ function buildObjects(input, skipTypes, skipNames) {
     return;
   }
 
-  const twoDrows = new Map();
+  const enclosed = new Map();
   const nativeObjects = new Map();
 
   for (let key of Object.keys(input.properties)) {
@@ -651,7 +600,17 @@ function buildObjects(input, skipTypes, skipNames) {
           if (is2DRectArray(obj)) {
             for (let row in obj) {
               // We have special rendering for two dimensional arrays
-              twoDrows.set(obj[row].__uniqueid, `${id}:${row}`);
+              enclosed.set(obj[row].__uniqueid, `${id}:${row}`);
+            }
+          } else if (
+            typeof obj == "object" &&
+            obj.__constructorName == "AdjacencyList"
+          ) {
+            // we have special rendering for AdjacencyLists
+            for (let property of Object.getOwnPropertyNames(obj)) {
+              if (property != "__uniqueid" && property != "__constructorName") {
+                enclosed.set(obj[property].__uniqueid, `${id}:${property}`);
+              }
             }
           }
           nativeObjects.set(id, obj);
@@ -660,7 +619,7 @@ function buildObjects(input, skipTypes, skipNames) {
     }
   }
 
-  return { objects: nativeObjects, twoDrows: twoDrows };
+  return { objects: nativeObjects, enclosed: enclosed };
 }
 
 function GetRange(text, start, end) {
@@ -711,7 +670,7 @@ function getVariables(scopeObj) {
 
   // const n = state.interpreter.getValueFromScope("n"); // TODO - Add traces for specific variables
 
-  const { objects, twoDrows } = buildObjects(scopeObj, skipTypes, skipNames);
+  const { objects, enclosed } = buildObjects(scopeObj, skipTypes, skipNames);
 
   for (let key of Object.keys(scopeObj.properties)) {
     if (skipNames.has(key)) continue;
@@ -729,7 +688,7 @@ function getVariables(scopeObj) {
     }
   }
 
-  return { objects: objects, twoDrows: twoDrows, variables: variables };
+  return { objects, enclosed, variables };
 }
 
 function DeepEqual(x, y) {
@@ -1058,7 +1017,6 @@ function objToDot(currentObject) {
       (x) => x != "__uniqueid" && x != "__constructorName"
     );
 
-    console.log("properties", properties);
     for (let property of properties) {
       const cols = [];
       for (let adj of currentObject[property]) {
@@ -1155,7 +1113,7 @@ function objToDot(currentObject) {
   return { objectMarkup, relationshipMarkup };
 }
 
-function visualizeDot({ objects, twoDrows, variables }) {
+function visualizeDot({ objects, enclosed, variables }) {
   const subgraphs = [];
   const objs = [];
   const rels = [];
@@ -1175,8 +1133,8 @@ function visualizeDot({ objects, twoDrows, variables }) {
       objs.push(
         `"${displayName}"[shape="signature" color="${color}" label="${displayName}" tooltip="${displayTooltip}"]`
       );
-      if (twoDrows.has(id)) {
-        rels.push(`"${displayName}":e -> ${twoDrows.get(id)}`);
+      if (enclosed.has(id)) {
+        rels.push(`"${displayName}":e -> ${enclosed.get(id)}`);
       } else {
         rels.push(`"${displayName}":e -> ${id}`);
       }
@@ -1210,7 +1168,7 @@ function visualizeDot({ objects, twoDrows, variables }) {
   const binaryTreeNodes = new Map();
 
   objects.keys().forEach((id) => {
-    if (twoDrows.has(id)) {
+    if (enclosed.has(id)) {
       return; // don't include objects that are already rendered in a 2d graph
     }
     const currentObject = objects.get(id);
@@ -1248,7 +1206,6 @@ function visualizeDot({ objects, twoDrows, variables }) {
     const width = 1;
     const maxTreeHeight = treeHeight(tree);
     const n = new DummyBinaryNode(tree, maxTreeHeight, key);
-    console.log(n);
     let levels = [];
     treeLevels(n, 0, levels);
 
@@ -1336,8 +1293,6 @@ function visualizeDot({ objects, twoDrows, variables }) {
         levelOrder = levelOrder.substring(0, levelOrder.lastIndexOf("->")); // remove last padding right
 
         levelOrder = `{rank=same ${levelOrder} [style=invis]}`; // style=invis
-
-        console.log("LO", levelOrder);
 
         subgraph.push(levelOrder);
       }
