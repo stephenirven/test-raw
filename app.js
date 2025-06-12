@@ -153,7 +153,7 @@ const Dot = (function () {
         value != null
       ) {
         relationshipMarkup.push(
-          `${id} -> ${value.__uniqueid}:w [color="${color}", fontcolor="${color}" label="has" decorate="true"]`
+          `${id} -> ${value.__uniqueid} [color="${color}", fontcolor="${color}" label="has" decorate="true"]`
         );
       } else {
         labelMarkup.push(`<TR><TD>${escape(value)}</TD></TR>`);
@@ -196,9 +196,9 @@ const Dot = (function () {
             )}">object</TD></TR>`
           );
           relationshipMarkup.push(
-            `"${escape(id)}":"${escape(key)}":e -> ${
+            `"${escape(id)}":"${escape(key)}" -> ${
               value.__uniqueid
-            }:w [color="${color}" fontcolor="${color}" decorate="true" headlabel="${escape(
+            } [color="${color}" fontcolor="${color}" decorate="true" headlabel="${escape(
               key
             )}"]`
           );
@@ -278,9 +278,9 @@ const Dot = (function () {
         currentProperty != null
       ) {
         relationshipMarkup.push(
-          `"${escape(id)}":"${escape(key)}":e -> ${
+          `"${escape(id)}":"${escape(key)}" -> ${
             currentProperty.__uniqueid
-          }:w [color="${color}" fontcolor="${color}" decorate="true" headlabel="${escape(
+          } [color="${color}" fontcolor="${color}" decorate="true" headlabel="${escape(
             key
           )}"]`
         );
@@ -375,18 +375,17 @@ const Dot = (function () {
     return subgraph.join("\n");
   }
 
-  function toDOTMarkup({ objects, enclosed, variables }, stack = []) {
-    const subgraphs = [];
+  function vizVariables(objects, enclosed, variables) {
+    const subgraph = [`subgraph cluster_variables {`];
+    subgraph.push(`label="Variables";`);
+    subgraph.push("peripheries=1;");
+    subgraph.push(`rankdir="BT";`);
+    subgraph.push("nodesep=0;");
+    subgraph.push("ranksep=0;");
+
     const nodes = [];
     const edges = [];
-    const styles = [];
 
-    if (stack.length > 0) {
-      const stackSubgraph = vizStack(stack);
-      subgraphs.push(stackSubgraph);
-    }
-
-    const objVars = new Map();
     variables.keys().forEach((name) => {
       const val = variables.get(name);
 
@@ -402,7 +401,7 @@ const Dot = (function () {
         );
         if (enclosed.has(id)) {
           edges.push(
-            `"${displayName}":e -> ${enclosed.get(
+            `"${displayName}" -> ${enclosed.get(
               id
             )} [color="${color}" constraint=false]`
           );
@@ -428,7 +427,7 @@ const Dot = (function () {
             val < objects.get(variables.get(stringName).id).length
           ) {
             edges.push(
-              `"${displayName}":e -> ${
+              `"${displayName}" -> ${
                 objects.get(variables.get(stringName).id).__uniqueid
               }:${val} [color="${color}" constraint=false]`
             );
@@ -436,6 +435,26 @@ const Dot = (function () {
         }
       }
     });
+    subgraph.push(...nodes);
+
+    subgraph.push("}");
+    subgraph.push(...edges);
+    return subgraph.join("\n");
+  }
+
+  function toDOTMarkup({ objects, enclosed, variables }, stack = []) {
+    const subgraphs = [];
+    const nodes = [];
+    const edges = [];
+    const styles = [];
+
+    if (stack.length > 0) {
+      const stackSubgraph = vizStack(stack);
+      subgraphs.push(stackSubgraph);
+    }
+
+    const variableSubgraph = vizVariables(objects, enclosed, variables);
+    subgraphs.push(variableSubgraph);
 
     // Binary tree nodes in the data set
     const binaryTreeNodes = new Map();
@@ -581,24 +600,30 @@ const Dot = (function () {
     const splines = binaryTreeNodes.size > 0 ? "splines=false;" : "";
     const rankdir = binaryTreeNodes.size > 0 ? "TB" : "LR";
 
+    edges.push(
+      `"stack_frame_0" -> "input" [ltail="cluster_stack" lhead="cluster_variables" style=invis];`
+    );
+
     return `
 digraph structs {
-    nodesep=0.3; 
-    ranksep=0.2;
-    margin="1.5,0.5";
-    rankdir=${rankdir};
-    packMode="node";
-    tooltip="state visualisation";
-    labeljust=l;
-    ${splines}
+  bgcolor="lightblue"
+  nodesep=0.3; 
+  ranksep=0.2;
+  margin="1.5,0.5";
+  rankdir=${rankdir};
+  packMode="node";
+  tooltip="state visualisation";
+  labeljust=l;
+  compound=true;
+  ${splines}
 
-    node [shape=plaintext ordering="out"];
-    edge [arrowhead="none"];
+  node [shape=plaintext ordering="out"];
+  edge [arrowhead="none"];
 
-    ${subgraphs.join("\n")}
-    ${nodes.join("\n")}
-    ${edges.join("\n")}
-    ${styles.join("\n")}
+  ${subgraphs.join("\n")}
+  ${nodes.join("\n")}
+  ${edges.join("\n")}
+  ${styles.join("\n")}
 
 }
     `;
@@ -1019,6 +1044,7 @@ class StateManager {
   display(regardless = false) {
     if (regardless || this.variables.hasChanges) {
       const dot = Dot.toDOTMarkup(this.variables.current, this.stack);
+      console.log(dot);
       var graphviz = d3
         .select("#visualisation")
         .graphviz()
