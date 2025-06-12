@@ -5,6 +5,548 @@ sourceMap.SourceMapConsumer.initialize({
   "lib/mappings.wasm": "https://unpkg.com/source-map@0.7.3/lib/mappings.wasm",
 });
 
+const Dot = (function () {
+  function escape(data) {
+    if (
+      data instanceof Symbol ||
+      data instanceof String ||
+      typeof data == "string"
+    ) {
+      return data.replace(
+        /[\u00A0-\u9999<>\&]/g,
+        (i) => "&#" + i.charCodeAt(0) + ";"
+      );
+    }
+    return data;
+  }
+  function itemToDot(currentObject) {
+    const id = currentObject.__uniqueid;
+    const color = getColorForId(id);
+    const relationshipMarkups = [];
+    const attrs = [];
+    const type = currentObject.constructor.name;
+    const labels = [];
+    const subgraphMarkups = [];
+
+    labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
+
+    // content types
+    if (currentObject instanceof String) {
+      const { labelMarkup, _ } = stringContent(currentObject);
+      labels.push(...labelMarkup);
+    } else if (currentObject instanceof Date) {
+      const { labelMarkup, _ } = dateContent(currentObject);
+      labels.push(...labelMarkup);
+    } else if (currentObject instanceof Function) {
+      const { labelMarkup, _ } = funcContent(currentObject);
+      labels.push(...labelMarkup);
+    } else if (currentObject instanceof Set) {
+      const { labelMarkup, relationshipMarkup } = setContent(currentObject);
+      labels.push(...labelMarkup);
+      relationshipMarkups.push(...relationshipMarkup);
+    } else if (currentObject instanceof Array || currentObject instanceof Map) {
+      const { labelMarkup, relationshipMarkup } = keyValContent(currentObject);
+      console.log(labelMarkup);
+      console.log(relationshipMarkup);
+      labels.push(...labelMarkup);
+      relationshipMarkups.push(...relationshipMarkup);
+    } else if (
+      currentObject instanceof RegExp ||
+      currentObject instanceof Error
+    ) {
+      const { labelMarkup, _ } = stringifyContent(currentObject);
+      labels.push(...labelMarkup);
+    } else if (currentObject.__constructorName == "AdjacencyList") {
+      // this isn't a local class
+      const { labelMarkup, relationshipMarkup, subgraphMarkup } =
+        adjacencyListContent(currentObject);
+      labels.push(...labelMarkup);
+      relationshipMarkups.push(...relationshipMarkup);
+      subgraphMarkups.push(...subgraphMarkup);
+    } else {
+      const { labelMarkup, relationshipMarkup } = objContent(currentObject);
+      labels.push(...labelMarkup);
+      relationshipMarkups.push(...relationshipMarkup);
+    }
+
+    // end content
+
+    labels.push(`</TABLE>`);
+    attrs.push(`label=<${labels.join("")}>`);
+    attrs.push(`tooltip="${escape(type)}"`);
+    attrs.push(`color="${color}"`);
+    attrs.push(`fillcolor="${color}"`);
+    const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
+    return {
+      objectMarkup,
+      relationshipMarkup: relationshipMarkups,
+      subgraphMarkup: subgraphMarkups,
+    };
+  }
+  function stringContent(currentObject) {
+    const header = [`<TD>String</TD>`];
+    const cols = [`<TD></TD>`];
+    for (let i = 0; i < currentObject.length; i++) {
+      header.push(`<TD>${i}</TD>`);
+      cols.push(`<TD PORT="${i}">${currentObject[i]}</TD>`);
+    }
+    return {
+      labelMarkup: [`<TR>${header.join("")}</TR>`, `<TR>${cols.join("")}</TR>`],
+      relationshipMarkup: [],
+    };
+  }
+  function stringifyContent(currentObject) {
+    const type = currentObject.constructor.name;
+    return {
+      labelMarkup: [
+        `<TR><TD>${type}</TD><TD>${escape(currentObject.toString())}</TD></TR>`,
+      ],
+      relationshipMarkup: [],
+    };
+    labels.push();
+  }
+  function dateContent(currentObject) {
+    return {
+      labelMarkup: [
+        `<TR><TD>Date</TD><TD>${escape(currentObject.toISOString())}</TD></TR>`,
+      ],
+      relationshipMarkup: [],
+    };
+  }
+  function funcContent(currentObject) {
+    let bodyText = escape(getBodyText(currentObject));
+    if (bodyText.length > 15) {
+      bodyText = bodyText.substring(0, 12) + "...";
+    }
+
+    return {
+      labelMarkup: [
+        `<TR><TD>${escape(currentObject.functionName)}(${escape(
+          currentObject.params.join(",")
+        )})</TD><TD>${bodyText}</TD></TR>`,
+      ],
+      relationshipMarkup: [],
+    };
+  }
+  function nonRenderableContent(currentObject) {
+    return {
+      labelMarkup: [`<TR><TD>${type}</TD><TD>Not renderable</TD></TR>`],
+      relationshipMarkup: [],
+    };
+  }
+  function setContent(currentObject) {
+    const id = currentObject.__uniqueid;
+    const type = currentObject.constructor.name;
+    const color = getColorForId(id);
+    const labelMarkup = [];
+    const relationshipMarkup = [];
+    labelMarkup.push(`<TR><TD>${type}(${currentObject.size})</TD></TR>`);
+    currentObject.forEach((value) => {
+      if (
+        (typeof value == "object" || typeof value == "function") &&
+        value != null
+      ) {
+        relationshipMarkup.push(
+          `${id} -> ${value.__uniqueid}:w [color="${color}", fontcolor="${color}" label="has" decorate="true"]`
+        );
+      } else {
+        labelMarkup.push(`<TR><TD>${escape(value)}</TD></TR>`);
+      }
+    });
+    return { labelMarkup, relationshipMarkup };
+  }
+  function keyValContent(currentObject) {
+    const id = currentObject.__uniqueid;
+    const type = currentObject.constructor.name;
+    const color = getColorForId(id);
+    const labelMarkup = [];
+    const relationshipMarkup = [];
+    if (is2DRectArray(currentObject)) {
+      cols = [];
+      for (let i = 0; i < currentObject[0].length; i++) {
+        cols.push(`<TD>#${i}</TD>`);
+      }
+      labelMarkup.push(`<TR><TD>2D</TD>${cols.join("")}</TR>`);
+      currentObject.forEach((row, key) => {
+        const r = row.map((x) => `<TD>${x}</TD>`).join("");
+        labelMarkup.push(
+          `<TR><TD PORT="${escape(key)}">#${escape(key)}</TD>${r}</TR>`
+        );
+      });
+    } else {
+      const length =
+        type == "Array" ? currentObject.length : currentObject.size;
+
+      labelMarkup.push(`<TR><TD COLSPAN="2">${type}(${length})</TD></TR>`);
+
+      currentObject.forEach((value, key) => {
+        if (
+          (typeof value == "object" || typeof value == "function") &&
+          value != null
+        ) {
+          labelMarkup.push(
+            `<TR><TD>#${escape(key)}</TD><TD PORT="${escape(
+              key
+            )}">object</TD></TR>`
+          );
+          relationshipMarkup.push(
+            `"${escape(id)}":"${escape(key)}":e -> ${
+              value.__uniqueid
+            }:w [color="${color}" fontcolor="${color}" decorate="true" headlabel="${escape(
+              key
+            )}"]`
+          );
+        } else {
+          labelMarkup.push(
+            `<TR><TD>#${key}</TD><TD PORT="${escape(key)}">${escape(
+              value
+            )}</TD></TR>`
+          );
+        }
+      });
+    }
+    return { labelMarkup, relationshipMarkup };
+  }
+  function adjacencyListContent(currentObject) {
+    const relationshipMarkup = [];
+    const subgraphMarkup = [`subgraph cluster_adjacency_list_${id} {`];
+    subgraphMarkup.push(`edge [arrowhead="normal"]`);
+    subgraphMarkup.push(`node [shape="oval"]`);
+
+    const labeslMarkup = [];
+    labelMarkup.push(
+      `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
+    );
+    labelMarkup.push(`<TR><TD COLSPAN="100%">Adjacency list</TD></TR>`);
+
+    const properties = Object.getOwnPropertyNames(currentObject).filter(
+      (x) => x != "__uniqueid" && x != "__constructorName"
+    );
+
+    for (let property of properties) {
+      const cols = [];
+      for (let adj of currentObject[property]) {
+        subgraphMarkup.push(`${property} -> ${adj}`);
+        cols.push(`<TD>${escape(adj)}</TD>`);
+      }
+
+      labelMarkup.push(
+        `<TR><TD PORT="${escape(property)}">${escape(
+          property + " ==> "
+        )}</TD>${cols.join("")}</TR>`
+      );
+    }
+
+    labelMarkup.push(`</TABLE>`);
+    attrs.push(`label=<${labelMarkup.join("")}>`);
+
+    subgraphMarkup.push("}");
+    if (properties.length > 0) {
+      relationshipMarkup.push(subgraphMarkup.join("\n"));
+      relationshipMarkup.push(
+        `"${escape(id)}" -> "${properties[0]}" [ltail="${escape(
+          `cluster_adjacency_list_${id}" label="image" style=dashed arrowhead=curve, arrowtail=dot]`
+        )}`
+      );
+    }
+    return { labelMarkup, relationshipMarkup, subgraphMarkup };
+  }
+  function objContent(currentObject) {
+    const id = currentObject.__uniqueid;
+    const color = getColorForId(id);
+    const labelMarkup = [];
+    const relationshipMarkup = [];
+    const type = currentObject.constructor.name;
+
+    labelMarkup.push(`<TR><TD COLSPAN="2">${type}(${length})</TD></TR>`);
+    Object.getOwnPropertyNames(currentObject).forEach((key) => {
+      const currentProperty = currentObject[key];
+      if (
+        (typeof currentProperty == "object" ||
+          typeof currentProperty == "function") &&
+        currentProperty != null
+      ) {
+        relationshipMarkup.push(
+          `"${escape(id)}":"${escape(key)}":e -> ${
+            currentProperty.__uniqueid
+          }:w [color="${color}" fontcolor="${color}" decorate="true" headlabel="${escape(
+            key
+          )}"]`
+        );
+
+        labelMarkup.push(
+          `<TR><TD>#${escape(key)}</TD><TD PORT="${escape(
+            key
+          )}">object</TD></TR>`
+        );
+      } else if (key != "__uniqueid" && key != "__constructorName") {
+        labelMarkup.push(
+          `<TR><TD>#${escape(key)}</TD><TD PORT="${escape(key)}">${escape(
+            currentObject[key]
+          )}</TD></TR>`
+        );
+      }
+    });
+
+    return { labelMarkup, relationshipMarkup };
+  }
+
+  function vizStack(stack) {
+    const subgraph = [`subgraph cluster_stack_vis {`];
+    subgraph.push("peripheries=1;");
+    subgraph.push("rankdir=BT;");
+    subgraph.push("nodesep=.1;");
+    subgraph.push("ranksep=.1;");
+
+    const frames = [];
+    for (let frame of stack) {
+      const { objectMarkup, relationshipMarkup } = objContent(frame);
+      frames.push(objectMarkup);
+      frames.push(relationshipMarkup);
+    }
+    if (stack.length > 1) {
+      subgraph.push(
+        `{rank=same ${stack
+          .map((x) => `"${x.__uniqueid}"`)
+          .join(" -> ")} [style=invis]}`
+      );
+    }
+    subgraph.push(frames.join(""));
+
+    subgraph.push("}");
+    return subgraph.join("\n");
+  }
+
+  function toDOTMarkup({ objects, enclosed, variables }, stack = []) {
+    const subgraphs = [];
+    const nodes = [];
+    const edges = [];
+    const styles = [];
+
+    if (stack.length > 0) {
+      const stackSubgraph = vizStack(stack);
+      subgraphs.push(stackSubgraph);
+    }
+
+    const objVars = new Map();
+    variables.keys().forEach((name) => {
+      const val = variables.get(name);
+
+      const color = getColorForString(name);
+
+      const displayName = escape(name);
+      const displayTooltip = `Variable ${displayName}`;
+      if (typeof val == "object" && val != null) {
+        const id = val.id;
+
+        nodes.push(
+          `"${displayName}"[shape="signature" color="${color}" label="${displayName}" tooltip="${displayTooltip}"]`
+        );
+        if (enclosed.has(id)) {
+          edges.push(
+            `"${displayName}":e -> "${enclosed.get(
+              id
+            )}" [color="${color}" constraint=false]`
+          );
+        } else {
+          edges.push(
+            `"${displayName}":e -> "${id}" [color="${color}" constraint=false]`
+          );
+        }
+      } else {
+        nodes.push(
+          `"${displayName}"[shape="signature" color="${color}" label="${displayName}: ${
+            val ? val.toString() : val
+          }" tooltip="${displayTooltip}"]`
+        );
+        // Cater for string pointers
+        if (Number.isInteger(val) && val >= 0) {
+          const [stringName, ...rest] = displayName.split(/_(.*)/s);
+          if (
+            variables.has(stringName) &&
+            variables.get(stringName) instanceof ObjectPointer &&
+            objects.has(variables.get(stringName).id) &&
+            objects.get(variables.get(stringName).id) instanceof String &&
+            val < objects.get(variables.get(stringName).id).length
+          ) {
+            edges.push(
+              `"${displayName}":e -> ${
+                objects.get(variables.get(stringName).id).__uniqueid
+              }:${val} [color="${color}" constraint=false]`
+            );
+          }
+        }
+      }
+    });
+
+    // Binary tree nodes in the data set
+    const binaryTreeNodes = new Map();
+
+    objects.keys().forEach((id) => {
+      if (enclosed.has(id)) {
+        return; // don't include objects that are already rendered in a 2d graph
+      }
+      const currentObject = objects.get(id);
+
+      if (currentObject.__constructorName == "BinaryNode") {
+        binaryTreeNodes.set(currentObject.__uniqueid, currentObject);
+        return; // don't include binary tree nodes that will be in subgraphs
+      }
+
+      const { objectMarkup, relationshipMarkup, subgraphMarkup } =
+        itemToDot(currentObject);
+
+      nodes.push(objectMarkup);
+      if (relationshipMarkup.length > 0) {
+        edges.push(...relationshipMarkup);
+      }
+      if (subgraphs.length > 0) {
+        subgraphs.push(subgraphMarkup);
+      }
+    });
+
+    const nonRootNodes = new Set();
+    for (let id of binaryTreeNodes.keys()) {
+      let node = binaryTreeNodes.get(id);
+      nonRootNodes.add(node.left?.__uniqueid);
+      nonRootNodes.add(node.right?.__uniqueid);
+    }
+    for (let id of nonRootNodes) {
+      binaryTreeNodes.delete(id);
+    }
+    const trees = new Map();
+    for (let [key, tree] of binaryTreeNodes) {
+      const gap = 0.1;
+      const width = 1;
+      const maxTreeHeight = treeHeight(tree);
+      const n = new DummyBinaryNode(tree, maxTreeHeight, key);
+      let levels = [];
+      treeLevels(n, 0, levels);
+
+      const subgraph = [`subgraph cluster_binarytree_${n.__uniqueid} {`];
+      subgraph.push("peripheries=0;");
+
+      for (let levelNum = 0; levelNum < levels.length; levelNum++) {
+        const level = levels[levelNum];
+        const paddingWidth =
+          Math.pow(2, maxTreeHeight - levelNum) * gap +
+          (Math.pow(2, maxTreeHeight - levelNum) - 1) * width;
+        const paddingNodes = [];
+        for (let node of level) {
+          const id = node.__uniqueid;
+
+          const val = node.val;
+          const color = getColorForId(id);
+          const relationshipMarkup = [];
+          const attrs = [];
+          const labels = [];
+
+          labels.push(
+            `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
+          );
+          labels.push(`<TR><TD COLSPAN="2">${escape(val)}</TD></TR>`);
+          labels.push(
+            `<TR><TD PORT="left">left</TD><TD PORT="right">right</TD></TR>`
+          );
+          labels.push(`</TABLE>`);
+          if (node.left != null) {
+            const style = !Number.isInteger(node.left.__uniqueid)
+              ? "style=invis" // style=invis
+              : "";
+            relationshipMarkup.push(
+              `"${escape(id)}":"left" -> ${
+                node.left.__uniqueid
+              } [color="${color}" fontcolor="${color}" decorate="true" headlabel="left" ${style}]`
+            );
+
+            relationshipMarkup.push(
+              `"${escape(id)}" -> "p-${node.left.__uniqueid}" [style=invis]` // style=invis
+            );
+
+            paddingNodes.push(
+              `"p-${node.left.__uniqueid}" [width=${paddingWidth} style=invis]` // style=invis
+            );
+          }
+
+          if (node.right != null) {
+            const style = !Number.isInteger(node.right.__uniqueid)
+              ? "style=invis" //style=invis
+              : "";
+            relationshipMarkup.push(
+              `"${escape(id)}":"right" -> ${
+                node.right.__uniqueid
+              } [color="${color}" fontcolor="${color}" decorate="true" headlabel="right" ${style}]`
+            );
+            paddingNodes.push(
+              `"p-${node.right.__uniqueid}" [width=${0} style=invis]` // style=invis
+            );
+          }
+          attrs.push(`width=1`);
+          attrs.push(`label=<${labels.join("")}>`);
+          attrs.push(`tooltip="Node"`);
+          attrs.push(`color="${color}"`);
+          attrs.push(`fillcolor="${color}"`);
+          if (!Number.isInteger(id)) {
+            attrs.push(`style=invis`); // style=invis
+          }
+
+          const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
+
+          subgraph.push(objectMarkup);
+          subgraph.push(relationshipMarkup.join("\n"));
+        }
+        paddingNodes.pop(); // remove last padding right...
+        subgraph.push(paddingNodes.join("\n"));
+
+        if (level.length > 1) {
+          let levelOrder = level
+            .map((x) => `"${x.__uniqueid}" -> "p-${x.__uniqueid}"`)
+            .join(" -> ");
+          levelOrder = levelOrder.substring(0, levelOrder.lastIndexOf("->")); // remove last padding right
+
+          levelOrder = `{rank=same ${levelOrder} [style=invis]}`; // style=invis
+
+          subgraph.push(levelOrder);
+        }
+      }
+
+      subgraph.push("}");
+
+      subgraphs.push(subgraph.join("\n"));
+    }
+
+    // trees render better without splines.
+    // ideally we would set this only for the tree subgraphs
+    // but it's a graph level attribute
+    const splines = binaryTreeNodes.size > 0 ? "splines=false;" : "";
+    const rankdir = binaryTreeNodes.size > 0 ? "TB" : "LR";
+
+    return `
+digraph structs {
+    nodesep=0.3; 
+    ranksep=0.2;
+    margin="1.5,0.5";
+    rankdir=${rankdir};
+    packMode="graph";
+    tooltip="state visualisation";
+    labeljust=l;
+    ${splines}
+
+    node [shape=plaintext ordering="out"];
+    edge [arrowhead="none"];
+
+    ${subgraphs.join("\n")}
+    ${nodes.join("\n")}
+    ${edges.join("\n")}
+    ${styles.join("\n")}
+
+}
+    `;
+  }
+
+  return { toDOTMarkup };
+})();
+
 const config = {
   babelOptions: {
     sourceType: "script",
@@ -58,7 +600,7 @@ function getColorForNumericId(id) {
   return config.colorWheel[id % config.colorWheel.length];
 }
 
-function getColorForName(name) {
+function getColorForString(name) {
   // hash function can return negative integers
   const id =
     ((sdbm(name) % config.colorWheel.length) + config.colorWheel.length) %
@@ -71,7 +613,7 @@ function getColorForId(id) {
   if (Number.isInteger(id)) {
     return getColorForNumericId(id);
   }
-  return getColorForName(id);
+  return getColorForString(id);
 }
 
 // Hashing function to get an integer represnetation of a string
@@ -158,15 +700,16 @@ class VariableStore {
     return false;
   }
 
-  update() {
+  update(scopeObj) {
     this.prev = this.current;
-    this.current = getVariables(state.interpreter.getScope().object);
+    this.current = getVariables(scopeObj);
   }
 }
 
 class StateManager {
   constructor() {
     this.variables = new VariableStore();
+    this.stack = [];
     this.classesToIgnore = [];
     this.skipConstructors = new Set();
     this.source = "";
@@ -190,6 +733,51 @@ class StateManager {
       code_source: document.getElementById("code-source"),
       status: document.getElementById("status"),
     };
+
+    this.update = this.update.bind(this);
+    this.updateVariables = this.updateVariables.bind(this);
+    this.updateStack = this.updateStack.bind(this);
+  }
+
+  update() {
+    this.updateVariables();
+    this.updateStack();
+  }
+
+  updateVariables() {
+    this.variables.update(this.interpreter.getScope().object);
+  }
+
+  updateStack() {
+    const vmStack = state.interpreter.getStateStack();
+
+    this.stack = [];
+    for (let i = 0; i < vmStack.length; i++) {
+      const callFrame = vmStack[i];
+      if (
+        callFrame.node?.type == "CallExpression" &&
+        callFrame.node.callee.name != undefined
+      ) {
+        const scope = {
+          __uniqueid: "stack_frame_" + this.stack.length,
+          name: callFrame.node.callee.name,
+          //args: callFrame.node.arguments,
+        };
+        this.stack.push(scope);
+        if (i < vmStack.length - 1) {
+          const blockscope = vmStack[i + 1].scope.object.properties;
+
+          scope.values = {};
+          for (let property of Object.getOwnPropertyNames(blockscope)) {
+            if (property != "arguments" && property != "this") {
+              if (typeof blockscope[property] != "object") {
+                scope.values[property] = blockscope[property];
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   async getSample(sample) {
@@ -365,7 +953,8 @@ class StateManager {
 
   display(regardless = false) {
     if (regardless || this.variables.hasChanges) {
-      const dot = visualizeDot(this.variables.current);
+      const dot = Dot.toDOTMarkup(this.variables.current, this.stack);
+      console.log(dot);
       var graphviz = d3
         .select("#visualisation")
         .graphviz()
@@ -391,9 +980,33 @@ class StateManager {
 
 const state = new StateManager();
 
-state.getSample(
-  "https://raw.githubusercontent.com/stephenirven/test-raw/refs/heads/main/samples/js/string/rle.js"
-);
+// state.getSample(
+//   "https://raw.githubusercontent.com/stephenirven/test-raw/refs/heads/main/samples/js/string/rle.js"
+// );
+state.getSample(`
+console.log("hello");
+console.log("hello");
+console.log("hello");
+
+
+const b = [[1,2,3],[4,5,6],[7,8,9]]
+
+
+console.log(fibonacci(5));
+
+function fibonacci(num, memo = []) {
+  if (memo[num] != undefined) return memo[num];
+
+  if (num == 0) return 0;
+  if (num == 1) return 1;
+
+  const val = fibonacci(num-1, memo) + fibonacci(num-2, memo);
+
+  memo[num] = val;
+  return val;
+}
+
+  `);
 
 async function parseButton() {
   state.displayError();
@@ -462,7 +1075,7 @@ function stepButton() {
 
   //const head = state.interpreter.getValueFromScope("head"); // TODO - Add traces for specific variables
 
-  state.variables.update();
+  state.update();
   state.display();
 
   if (error) {
@@ -571,7 +1184,7 @@ function buildObjects(input, skipTypes, skipNames) {
   if (typeof input != "object" || !(input instanceof Interpreter.Object)) {
     return;
   }
-
+  console.log(input);
   const enclosed = new Map();
   const nativeObjects = new Map();
 
@@ -701,647 +1314,673 @@ function DeepEqual(x, y) {
     : x === y;
 }
 
-function DotEscapeString(data) {
-  if (
-    data instanceof Symbol ||
-    data instanceof String ||
-    typeof data == "string"
-  ) {
-    return data.replace(
-      /[\u00A0-\u9999<>\&]/g,
-      (i) => "&#" + i.charCodeAt(0) + ";"
-    );
-  }
-  return data;
-}
-
-function toDot(id, currentObject, variables) {
-  const type = currentObject.constructor.name;
-  const color = getColorForNumericId(id);
-
-  const attrs = [];
-
-  const labels = [];
-  switch (type) {
-    case "Function":
-      return funcToDot(currentObject);
-      break;
-    case "String":
-      return stringToDot(currentObject);
-      break;
-    case "RegExp":
-    case "Error":
-      return stringifyToDot(currentObject);
-      break;
-    case "Date":
-      return dateToDot(currentObject);
-      break;
-    case "Set":
-      return valToDot(currentObject);
-      break;
-    case "Array":
-    case "Map":
-      return keyValToDot(currentObject);
-      break;
-    case "WeakSet":
-    case "WeakMap":
-      return notRenderableToDot(currentObject);
-      break;
-    default:
-      return objToDot(currentObject);
-  }
-  // attrs.push(`tooltip="${DotEscapeString(type)}"`);
-
-  // attrs.push(`color="${color}"`);
-  // attrs.push(`fillcolor="${color}"`);
-
-  // let objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-
-  return {
-    objectMarkup: objectMarkup,
-    relationshipMarkup: relationshipMarkup,
-  };
-}
-
-function notRenderableToDot(currentObject) {
-  const id = currentObject.__uniqueid;
-  const color = getColorForNumericId(id);
-
-  const relationshipMarkup = [];
-  const attrs = [];
-  const type = currentObject.constructor.name;
-  const labels = [];
-
-  labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
-  labels.push(`<TR><TD>${type}</TD><TD>Not renderable</TD></TR>`);
-  labels.push(`</TABLE>`);
-  attrs.push(`label=<${labels.join("")}>`);
-  attrs.push(`tooltip="${DotEscapeString(type)}"`);
-  attrs.push(`color="${color}"`);
-  attrs.push(`fillcolor="${color}"`);
-  const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-  return { objectMarkup, relationshipMarkup };
-}
-
-function valToDot(currentObject) {
-  const id = currentObject.__uniqueid;
-  const color = getColorForNumericId(id);
-
-  const relationshipMarkup = [];
-  const attrs = [];
-  const type = currentObject.constructor.name;
-  const labels = [];
-
-  labels.push(
-    `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-  );
-  labels.push(`<TR><TD>${type}(${currentObject.size})</TD></TR>`);
-  currentObject.forEach((value) => {
-    if (
-      (typeof value == "object" || typeof value == "function") &&
-      value != null
-    ) {
-      relationshipMarkup.push(
-        `${id} -> ${value.__uniqueid}:w [color="${color}", fontcolor="${color}" label="has" decorate="true"]`
-      );
-    } else {
-      labels.push(`<TR><TD>${DotEscapeString(value)}</TD></TR>`);
-    }
-  });
-  labels.push(`</TABLE>`);
-  attrs.push(`label=<${labels.join("")}>`);
-  attrs.push(`tooltip="${DotEscapeString(type)}"`);
-  attrs.push(`color="${color}"`);
-  attrs.push(`fillcolor="${color}"`);
-  const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-  return { objectMarkup, relationshipMarkup };
-}
-
-function stringifyToDot(currentObject) {
-  const id = currentObject.__uniqueid;
-  const color = getColorForNumericId(id);
-
-  const relationshipMarkup = [];
-  const attrs = [];
-  const type = currentObject.constructor.name;
-  const labels = [];
-
-  labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
-  labels.push(
-    `<TR><TD>${type}</TD><TD>${DotEscapeString(
-      currentObject.toString()
-    )}</TD></TR>`
-  );
-  labels.push(`</TABLE>`);
-  attrs.push(`label=<${labels.join("")}>`);
-  attrs.push(`tooltip="${DotEscapeString(type)}"`);
-  attrs.push(`color="${color}"`);
-  attrs.push(`fillcolor="${color}"`);
-  const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-  return { objectMarkup, relationshipMarkup };
-}
-
-function dateToDot(currentObject) {
-  const id = currentObject.__uniqueid;
-  const color = getColorForNumericId(id);
-
-  const relationshipMarkup = [];
-  const attrs = [];
-  const type = currentObject.constructor.name;
-  const labels = [];
-
-  labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
-  labels.push(
-    `<TR><TD>${type}</TD><TD>${DotEscapeString(
-      currentObject.toISOString()
-    )}</TD></TR>`
-  );
-  labels.push(`</TABLE>`);
-  attrs.push(`label=<${labels.join("")}>`);
-  attrs.push(`tooltip="${DotEscapeString(type)}"`);
-  attrs.push(`color="${color}"`);
-  attrs.push(`fillcolor="${color}"`);
-  const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-  return { objectMarkup, relationshipMarkup };
-}
-
-function stringToDot(currentObject) {
-  const id = currentObject.__uniqueid;
-  const color = getColorForNumericId(id);
-
-  const relationshipMarkup = [];
-  const attrs = [];
-  const type = currentObject.constructor.name;
-  const labels = [];
-
-  labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
-
-  const header = [`<TD>${type}</TD>`];
-  const cols = [`<TD></TD>`];
-  for (let i = 0; i < currentObject.length; i++) {
-    header.push(`<TD>${i}</TD>`);
-    cols.push(`<TD PORT="${i}">${currentObject[i]}</TD>`);
-  }
-
-  labels.push(`<TR>${header.join("")}</TR>`);
-  labels.push(`<TR>${cols.join("")}</TR>`);
-  labels.push(`</TABLE>`);
-  attrs.push(`label=<${labels.join("")}>`);
-
-  attrs.push(`tooltip="${DotEscapeString(type)}"`);
-  attrs.push(`color="${color}"`);
-  attrs.push(`fillcolor="${color}"`);
-  const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-  return { objectMarkup, relationshipMarkup };
-}
-
-function keyValToDot(currentObject) {
-  const id = currentObject.__uniqueid;
-  const color = getColorForNumericId(id);
-
-  const relationshipMarkup = [];
-  const attrs = [];
-  const type = currentObject.constructor.name;
-  const labels = [];
-
-  if (is2DRectArray(currentObject)) {
-    labels.push(
-      `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-    );
-    cols = [];
-    for (let i = 0; i < currentObject[0].length; i++) {
-      cols.push(`<TD>#${i}</TD>`);
-    }
-    labels.push(`<TR><TD>2D</TD>${cols.join("")}</TR>`);
-    currentObject.forEach((row, key) => {
-      const r = row.map((x) => `<TD>${x}</TD>`).join("");
-      labels.push(
-        `<TR><TD PORT="${DotEscapeString(key)}">#${DotEscapeString(
-          key
-        )}</TD>${r}</TR>`
-      );
-    });
-    labels.push(`</TABLE>`);
-    attrs.push(`label=<${labels.join("")}>`);
-  } else {
-    const length = type == "Array" ? currentObject.length : currentObject.size;
-
-    labels.push(
-      `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-    );
-    labels.push(`<TR><TD COLSPAN="2">${type}(${length})</TD></TR>`);
-
-    currentObject.forEach((value, key) => {
-      if (
-        (typeof value == "object" || typeof value == "function") &&
-        value != null
-      ) {
-        labels.push(
-          `<TR><TD>#${DotEscapeString(key)}</TD><TD PORT="${DotEscapeString(
-            key
-          )}">object</TD></TR>`
-        );
-        relationshipMarkup.push(
-          `"${DotEscapeString(id)}":"${DotEscapeString(key)}":e -> ${
-            value.__uniqueid
-          }:w [color="${color}" fontcolor="${color}" decorate="true" headlabel="${DotEscapeString(
-            key
-          )}"]`
-        );
-      } else {
-        labels.push(
-          `<TR><TD>#${key}</TD><TD PORT="${DotEscapeString(
-            key
-          )}">${DotEscapeString(value)}</TD></TR>`
-        );
-      }
-    });
-  }
-  labels.push(`</TABLE>`);
-  attrs.push(`label=<${labels.join("")}>`);
-
-  attrs.push(`tooltip="${DotEscapeString(type)}"`);
-  attrs.push(`color="${color}"`);
-  attrs.push(`fillcolor="${color}"`);
-  const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-  return { objectMarkup, relationshipMarkup };
-}
-
-function funcToDot(currentObject) {
-  const id = currentObject.__uniqueid;
-  const color = getColorForNumericId(id);
-
-  const relationshipMarkup = [];
-  const attrs = [];
-  const type = currentObject.constructor.name;
-  const labels = [];
-
-  let bodyText = DotEscapeString(getBodyText(currentObject));
-  if (bodyText.length > 15) {
-    bodyText = bodyText.substring(0, 12) + "...";
-  }
-  labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
-  labels.push(
-    `<TR><TD>${DotEscapeString(currentObject.functionName)}(${DotEscapeString(
-      currentObject.params.join(",")
-    )})</TD><TD>${bodyText}</TD></TR>`
-  );
-  labels.push(`</TABLE>`);
-  attrs.push(`label=<${labels.join("")}>`);
-  attrs.push(`tooltip="${DotEscapeString(type)}"`);
-  attrs.push(`color="${color}"`);
-  attrs.push(`fillcolor="${color}"`);
-
-  const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-  return { objectMarkup, relationshipMarkup };
-}
-
-function objToDot(currentObject) {
-  const id = currentObject.__uniqueid;
-  const color = getColorForNumericId(id);
-  const relationshipMarkup = [];
-  const attrs = [];
-  const type = currentObject.constructor.name;
-  const labels = [];
-  if (currentObject.__constructorName == "AdjacencyList") {
-    const visGraph = [`subgraph cluster_adjacency_list_${id} {`];
-    visGraph.push(`edge [arrowhead="normal"]`);
-    visGraph.push(`node [shape="oval"]`);
-
-    labels.push(
-      `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-    );
-    labels.push(`<TR><TD COLSPAN="100%">Adjacency list</TD></TR>`);
-
-    const properties = Object.getOwnPropertyNames(currentObject).filter(
-      (x) => x != "__uniqueid" && x != "__constructorName"
-    );
-
-    for (let property of properties) {
-      const cols = [];
-      for (let adj of currentObject[property]) {
-        visGraph.push(`${property} -> ${adj}`);
-        cols.push(`<TD>${DotEscapeString(adj)}</TD>`);
-      }
-
-      labels.push(
-        `<TR><TD PORT="${DotEscapeString(property)}">${DotEscapeString(
-          property + " ==> "
-        )}</TD>${cols.join("")}</TR>`
-      );
-    }
-
-    labels.push(`</TABLE>`);
-    attrs.push(`label=<${labels.join("")}>`);
-
-    visGraph.push("}");
-    if (properties.length > 0) {
-      relationshipMarkup.push(visGraph.join("\n"));
-      relationshipMarkup.push(
-        `"${DotEscapeString(id)}" -> "${
-          properties[0]
-        }" [ltail="${DotEscapeString(
-          `cluster_adjacency_list_${id}" label="image" style=dashed arrowhead=curve, arrowtail=dot]`
-        )}`
-      );
-    }
-  } else if (currentObject.__constructorName == "BinaryNode") {
-    labels.push(
-      `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-    );
-    labels.push(`<TR><TD COLSPAN="2">val : ${currentObject.val}</TD></TR>`);
-    labels.push(
-      `<TR><TD PORT="left">left</TD><TD PORT="right">right</TD></TR>`
-    );
-    labels.push(`</TABLE>`);
-    if (currentObject.left != null) {
-      relationshipMarkup.push(
-        // left / right ports here seem to make layout worse
-        `"${DotEscapeString(id)}" -> ${
-          currentObject.left.__uniqueid
-        } [color="${color}" fontcolor="${color}" decorate="true" headlabel="left"]`
-      );
-    }
-    if (currentObject.right != null) {
-      relationshipMarkup.push(
-        `"${DotEscapeString(id)}" -> ${
-          currentObject.right.__uniqueid
-        } [color="${color}" fontcolor="${color}" decorate="true" headlabel="right"]`
-      );
-    }
-  } else {
-    labels.push(
-      `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-    );
-    labels.push(`<TR><TD COLSPAN="2">${type}(${length})</TD></TR>`);
-    Object.getOwnPropertyNames(currentObject).forEach((key) => {
-      const currentProperty = currentObject[key];
-      if (
-        (typeof currentProperty == "object" ||
-          typeof currentProperty == "function") &&
-        currentProperty != null
-      ) {
-        relationshipMarkup.push(
-          `"${DotEscapeString(id)}":"${DotEscapeString(key)}":e -> ${
-            currentProperty.__uniqueid
-          }:w [color="${color}" fontcolor="${color}" decorate="true" headlabel="${DotEscapeString(
-            key
-          )}"]`
-        );
-
-        labels.push(
-          `<TR><TD>#${DotEscapeString(key)}</TD><TD PORT="${DotEscapeString(
-            key
-          )}">object</TD></TR>`
-        );
-      } else if (key != "__uniqueid" && key != "__constructorName") {
-        labels.push(
-          `<TR><TD>#${DotEscapeString(key)}</TD><TD PORT="${DotEscapeString(
-            key
-          )}">${DotEscapeString(currentObject[key])}</TD></TR>`
-        );
-      }
-    });
-
-    labels.push(`</TABLE>`);
-  }
-  attrs.push(`label=<${labels.join("")}>`);
-  attrs.push(`tooltip="${DotEscapeString(type)}"`);
-  attrs.push(`color="${color}"`);
-  attrs.push(`fillcolor="${color}"`);
-  const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-  return { objectMarkup, relationshipMarkup };
-}
-
-function visualizeDot({ objects, enclosed, variables }) {
-  const subgraphs = [];
-  const objs = [];
-  const rels = [];
-  const styles = [];
-
-  const objVars = new Map();
-  variables.keys().forEach((name) => {
-    const val = variables.get(name);
-
-    const color = getColorForName(name);
-
-    const displayName = DotEscapeString(name);
-    const displayTooltip = `Variable ${displayName}`;
-    if (typeof val == "object" && val != null) {
-      const id = val.id;
-
-      objs.push(
-        `"${displayName}"[shape="signature" color="${color}" label="${displayName}" tooltip="${displayTooltip}"]`
-      );
-      if (enclosed.has(id)) {
-        rels.push(
-          `"${displayName}":e -> "${enclosed.get(
-            id
-          )}" [color="${color}" constraint=false]`
-        );
-      } else {
-        rels.push(
-          `"${displayName}":e -> "${id}" [color="${color}" constraint=false]`
-        );
-      }
-    } else {
-      objs.push(
-        `"${displayName}"[shape="signature" color="${color}" label="${displayName}: ${
-          val ? val.toString() : val
-        }" tooltip="${displayTooltip}"]`
-      );
-      // Cater for string pointers
-      if (Number.isInteger(val) && val >= 0) {
-        const [stringName, ...rest] = displayName.split(/_(.*)/s);
-        if (
-          variables.has(stringName) &&
-          variables.get(stringName) instanceof ObjectPointer &&
-          objects.has(variables.get(stringName).id) &&
-          objects.get(variables.get(stringName).id) instanceof String &&
-          val < objects.get(variables.get(stringName).id).length
-        ) {
-          rels.push(
-            `"${displayName}":e -> ${
-              objects.get(variables.get(stringName).id).__uniqueid
-            }:${val} [color="${color}" constraint=false]`
-          );
-        }
-      }
-    }
-  });
-
-  // Binary tree nodes in the data set
-  const binaryTreeNodes = new Map();
-
-  objects.keys().forEach((id) => {
-    if (enclosed.has(id)) {
-      return; // don't include objects that are already rendered in a 2d graph
-    }
-    const currentObject = objects.get(id);
-
-    if (currentObject.__constructorName == "BinaryNode") {
-      binaryTreeNodes.set(currentObject.__uniqueid, currentObject);
-      return; // don't include binary tree nodes that will be in subgraphs
-    }
-
-    const objVariables = objVars.has(id) ? Array.from(objVars.get(id)) : [];
-    const { objectMarkup, relationshipMarkup } = toDot(
-      id,
-      currentObject,
-      objVariables
-    );
-
-    objs.push(objectMarkup);
-    if (relationshipMarkup.length > 0) {
-      rels.push(...relationshipMarkup);
-    }
-  });
-
-  const nonRootNodes = new Set();
-  for (let id of binaryTreeNodes.keys()) {
-    let node = binaryTreeNodes.get(id);
-    nonRootNodes.add(node.left?.__uniqueid);
-    nonRootNodes.add(node.right?.__uniqueid);
-  }
-  for (let id of nonRootNodes) {
-    binaryTreeNodes.delete(id);
-  }
-  const trees = new Map();
-  for (let [key, tree] of binaryTreeNodes) {
-    const gap = 0.1;
-    const width = 1;
-    const maxTreeHeight = treeHeight(tree);
-    const n = new DummyBinaryNode(tree, maxTreeHeight, key);
-    let levels = [];
-    treeLevels(n, 0, levels);
-
-    const subgraph = [`subgraph cluster_binarytree_${n.__uniqueid} {`];
-    subgraph.push("peripheries=0;");
-
-    for (let levelNum = 0; levelNum < levels.length; levelNum++) {
-      const level = levels[levelNum];
-      const paddingWidth =
-        Math.pow(2, maxTreeHeight - levelNum) * gap +
-        (Math.pow(2, maxTreeHeight - levelNum) - 1) * width;
-      const paddingNodes = [];
-      for (let node of level) {
-        const id = node.__uniqueid;
-
-        const val = node.val;
-        const color = getColorForId(id);
-        const relationshipMarkup = [];
-        const attrs = [];
-        const labels = [];
-
-        labels.push(
-          `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-        );
-        labels.push(`<TR><TD COLSPAN="2">${DotEscapeString(val)}</TD></TR>`);
-        labels.push(
-          `<TR><TD PORT="left">left</TD><TD PORT="right">right</TD></TR>`
-        );
-        labels.push(`</TABLE>`);
-        if (node.left != null) {
-          const style = !Number.isInteger(node.left.__uniqueid)
-            ? "style=invis" // style=invis
-            : "";
-          relationshipMarkup.push(
-            `"${DotEscapeString(id)}":"left" -> ${
-              node.left.__uniqueid
-            } [color="${color}" fontcolor="${color}" decorate="true" headlabel="left" ${style}]`
-          );
-
-          relationshipMarkup.push(
-            `"${DotEscapeString(id)}" -> "p-${
-              node.left.__uniqueid
-            }" [style=invis]` // style=invis
-          );
-
-          paddingNodes.push(
-            `"p-${node.left.__uniqueid}" [width=${paddingWidth} style=invis]` // style=invis
-          );
-        }
-
-        if (node.right != null) {
-          const style = !Number.isInteger(node.right.__uniqueid)
-            ? "style=invis" //style=invis
-            : "";
-          relationshipMarkup.push(
-            `"${DotEscapeString(id)}":"right" -> ${
-              node.right.__uniqueid
-            } [color="${color}" fontcolor="${color}" decorate="true" headlabel="right" ${style}]`
-          );
-          paddingNodes.push(
-            `"p-${node.right.__uniqueid}" [width=${0} style=invis]` // style=invis
-          );
-        }
-        attrs.push(`width=1`);
-        attrs.push(`label=<${labels.join("")}>`);
-        attrs.push(`tooltip="Node"`);
-        attrs.push(`color="${color}"`);
-        attrs.push(`fillcolor="${color}"`);
-        if (!Number.isInteger(id)) {
-          attrs.push(`style=invis`); // style=invis
-        }
-
-        const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-
-        subgraph.push(objectMarkup);
-        subgraph.push(relationshipMarkup.join("\n"));
-      }
-      paddingNodes.pop(); // remove last padding right...
-      subgraph.push(paddingNodes.join("\n"));
-
-      if (level.length > 1) {
-        let levelOrder = level
-          .map((x) => `"${x.__uniqueid}" -> "p-${x.__uniqueid}"`)
-          .join(" -> ");
-        levelOrder = levelOrder.substring(0, levelOrder.lastIndexOf("->")); // remove last padding right
-
-        levelOrder = `{rank=same ${levelOrder} [style=invis]}`; // style=invis
-
-        subgraph.push(levelOrder);
-      }
-    }
-
-    subgraph.push("}");
-
-    subgraphs.push(subgraph.join("\n"));
-  }
-
-  // trees render better without splines.
-  // ideally we would set this only for the tree subgraphs
-  // but it's a graph level attribute
-  const splines = binaryTreeNodes.size > 0 ? "splines=false;" : "";
-  const rankdir = binaryTreeNodes.size > 0 ? "TB" : "LR";
-
-  return `
-  digraph structs {
-      nodesep=0.3; 
-      ranksep=0.2;
-      margin="1.5,0.5";
-      rankdir=${rankdir};
-      packMode="graph";
-      tooltip="state visualisation";
-      labeljust=l;
-      ${splines}
-
-      node [shape=plaintext ordering="out"];
-      edge [arrowhead="none"];
-
-      ${
-        subgraphs.join("\n") +
-        "\n" +
-        objs.join("\n") +
-        "\n" +
-        rels.join("\n") +
-        "\n" +
-        styles.join("\n")
-      }
-
-  }
-    `;
-}
+// function DotEscapeString(data) {
+//   if (
+//     data instanceof Symbol ||
+//     data instanceof String ||
+//     typeof data == "string"
+//   ) {
+//     return data.replace(
+//       /[\u00A0-\u9999<>\&]/g,
+//       (i) => "&#" + i.charCodeAt(0) + ";"
+//     );
+//   }
+//   return data;
+// }
+
+// function toDot(id, currentObject, variables) {
+//   const type = currentObject.constructor.name;
+//   const color = getColorForNumericId(id);
+
+//   const attrs = [];
+
+//   const labels = [];
+//   switch (type) {
+//     case "Function":
+//       return funcToDot(currentObject);
+//       break;
+//     case "String":
+//       return stringToDot(currentObject);
+//       break;
+//     case "RegExp":
+//     case "Error":
+//       return stringifyToDot(currentObject);
+//       break;
+//     case "Date":
+//       return dateToDot(currentObject);
+//       break;
+//     case "Set":
+//       return valToDot(currentObject);
+//       break;
+//     case "Array":
+//     case "Map":
+//       return keyValToDot(currentObject);
+//       break;
+//     case "WeakSet":
+//     case "WeakMap":
+//       return notRenderableToDot(currentObject);
+//       break;
+//     default:
+//       return objToDot(currentObject);
+//   }
+//   // attrs.push(`tooltip="${DotEscapeString(type)}"`);
+
+//   // attrs.push(`color="${color}"`);
+//   // attrs.push(`fillcolor="${color}"`);
+
+//   // let objectMarkup = `"${id}" [${attrs.join(" ")}]`;
+
+//   return {
+//     objectMarkup: objectMarkup,
+//     relationshipMarkup: relationshipMarkup,
+//   };
+// }
+
+// function notRenderableToDot(currentObject) {
+//   const id = currentObject.__uniqueid;
+//   const color = getColorForNumericId(id);
+
+//   const relationshipMarkup = [];
+//   const attrs = [];
+//   const type = currentObject.constructor.name;
+//   const labels = [];
+
+//   labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
+//   labels.push(`<TR><TD>${type}</TD><TD>Not renderable</TD></TR>`);
+//   labels.push(`</TABLE>`);
+//   attrs.push(`label=<${labels.join("")}>`);
+//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
+//   attrs.push(`color="${color}"`);
+//   attrs.push(`fillcolor="${color}"`);
+//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
+//   return { objectMarkup, relationshipMarkup };
+// }
+
+// function valToDot(currentObject) {
+//   const id = currentObject.__uniqueid;
+//   const color = getColorForNumericId(id);
+
+//   const relationshipMarkup = [];
+//   const attrs = [];
+//   const type = currentObject.constructor.name;
+//   const labels = [];
+
+//   labels.push(
+//     `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
+//   );
+//   labels.push(`<TR><TD>${type}(${currentObject.size})</TD></TR>`);
+//   currentObject.forEach((value) => {
+//     if (
+//       (typeof value == "object" || typeof value == "function") &&
+//       value != null
+//     ) {
+//       relationshipMarkup.push(
+//         `${id} -> ${value.__uniqueid}:w [color="${color}", fontcolor="${color}" label="has" decorate="true"]`
+//       );
+//     } else {
+//       labels.push(`<TR><TD>${DotEscapeString(value)}</TD></TR>`);
+//     }
+//   });
+//   labels.push(`</TABLE>`);
+//   attrs.push(`label=<${labels.join("")}>`);
+//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
+//   attrs.push(`color="${color}"`);
+//   attrs.push(`fillcolor="${color}"`);
+//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
+//   return { objectMarkup, relationshipMarkup };
+// }
+
+// function stringifyToDot(currentObject) {
+//   const id = currentObject.__uniqueid;
+//   const color = getColorForNumericId(id);
+
+//   const relationshipMarkup = [];
+//   const attrs = [];
+//   const type = currentObject.constructor.name;
+//   const labels = [];
+
+//   labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
+//   labels.push(
+//     `<TR><TD>${type}</TD><TD>${DotEscapeString(
+//       currentObject.toString()
+//     )}</TD></TR>`
+//   );
+//   labels.push(`</TABLE>`);
+//   attrs.push(`label=<${labels.join("")}>`);
+//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
+//   attrs.push(`color="${color}"`);
+//   attrs.push(`fillcolor="${color}"`);
+//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
+//   return { objectMarkup, relationshipMarkup };
+// }
+
+// function dateToDot(currentObject) {
+//   const id = currentObject.__uniqueid;
+//   const color = getColorForNumericId(id);
+
+//   const relationshipMarkup = [];
+//   const attrs = [];
+//   const type = currentObject.constructor.name;
+//   const labels = [];
+
+//   labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
+//   labels.push(
+//     `<TR><TD>${type}</TD><TD>${DotEscapeString(
+//       currentObject.toISOString()
+//     )}</TD></TR>`
+//   );
+//   labels.push(`</TABLE>`);
+//   attrs.push(`label=<${labels.join("")}>`);
+//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
+//   attrs.push(`color="${color}"`);
+//   attrs.push(`fillcolor="${color}"`);
+//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
+//   return { objectMarkup, relationshipMarkup };
+// }
+
+// function stringToDot(currentObject) {
+//   const id = currentObject.__uniqueid;
+//   const color = getColorForNumericId(id);
+
+//   const relationshipMarkup = [];
+//   const attrs = [];
+//   const type = currentObject.constructor.name;
+//   const labels = [];
+
+//   labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
+
+//   const header = [`<TD>${type}</TD>`];
+//   const cols = [`<TD></TD>`];
+//   for (let i = 0; i < currentObject.length; i++) {
+//     header.push(`<TD>${i}</TD>`);
+//     cols.push(`<TD PORT="${i}">${currentObject[i]}</TD>`);
+//   }
+
+//   labels.push(`<TR>${header.join("")}</TR>`);
+//   labels.push(`<TR>${cols.join("")}</TR>`);
+//   labels.push(`</TABLE>`);
+//   attrs.push(`label=<${labels.join("")}>`);
+
+//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
+//   attrs.push(`color="${color}"`);
+//   attrs.push(`fillcolor="${color}"`);
+//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
+//   return { objectMarkup, relationshipMarkup };
+// }
+
+// function keyValToDot(currentObject) {
+//   const id = currentObject.__uniqueid;
+//   const color = getColorForNumericId(id);
+
+//   const relationshipMarkup = [];
+//   const attrs = [];
+//   const type = currentObject.constructor.name;
+//   const labels = [];
+
+//   if (is2DRectArray(currentObject)) {
+//     labels.push(
+//       `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
+//     );
+//     cols = [];
+//     for (let i = 0; i < currentObject[0].length; i++) {
+//       cols.push(`<TD>#${i}</TD>`);
+//     }
+//     labels.push(`<TR><TD>2D</TD>${cols.join("")}</TR>`);
+//     currentObject.forEach((row, key) => {
+//       const r = row.map((x) => `<TD>${x}</TD>`).join("");
+//       labels.push(
+//         `<TR><TD PORT="${DotEscapeString(key)}">#${DotEscapeString(
+//           key
+//         )}</TD>${r}</TR>`
+//       );
+//     });
+//     labels.push(`</TABLE>`);
+//     attrs.push(`label=<${labels.join("")}>`);
+//   } else {
+//     const length = type == "Array" ? currentObject.length : currentObject.size;
+
+//     labels.push(
+//       `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
+//     );
+//     labels.push(`<TR><TD COLSPAN="2">${type}(${length})</TD></TR>`);
+
+//     currentObject.forEach((value, key) => {
+//       if (
+//         (typeof value == "object" || typeof value == "function") &&
+//         value != null
+//       ) {
+//         labels.push(
+//           `<TR><TD>#${DotEscapeString(key)}</TD><TD PORT="${DotEscapeString(
+//             key
+//           )}">object</TD></TR>`
+//         );
+//         relationshipMarkup.push(
+//           `"${DotEscapeString(id)}":"${DotEscapeString(key)}":e -> ${
+//             value.__uniqueid
+//           }:w [color="${color}" fontcolor="${color}" decorate="true" headlabel="${DotEscapeString(
+//             key
+//           )}"]`
+//         );
+//       } else {
+//         labels.push(
+//           `<TR><TD>#${key}</TD><TD PORT="${DotEscapeString(
+//             key
+//           )}">${DotEscapeString(value)}</TD></TR>`
+//         );
+//       }
+//     });
+//   }
+//   labels.push(`</TABLE>`);
+//   attrs.push(`label=<${labels.join("")}>`);
+
+//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
+//   attrs.push(`color="${color}"`);
+//   attrs.push(`fillcolor="${color}"`);
+//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
+//   return { objectMarkup, relationshipMarkup };
+// }
+
+// function funcToDot(currentObject) {
+//   const id = currentObject.__uniqueid;
+//   const color = getColorForNumericId(id);
+
+//   const relationshipMarkup = [];
+//   const attrs = [];
+//   const type = currentObject.constructor.name;
+//   const labels = [];
+
+//   let bodyText = DotEscapeString(getBodyText(currentObject));
+//   if (bodyText.length > 15) {
+//     bodyText = bodyText.substring(0, 12) + "...";
+//   }
+//   labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
+//   labels.push(
+//     `<TR><TD>${DotEscapeString(currentObject.functionName)}(${DotEscapeString(
+//       currentObject.params.join(",")
+//     )})</TD><TD>${bodyText}</TD></TR>`
+//   );
+//   labels.push(`</TABLE>`);
+//   attrs.push(`label=<${labels.join("")}>`);
+//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
+//   attrs.push(`color="${color}"`);
+//   attrs.push(`fillcolor="${color}"`);
+
+//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
+//   return { objectMarkup, relationshipMarkup };
+// }
+
+// function objToDot(currentObject) {
+//   const id = currentObject.__uniqueid;
+//   const color = getColorForNumericId(id);
+//   const relationshipMarkup = [];
+//   const attrs = [];
+//   const type = currentObject.constructor.name;
+//   const labels = [];
+//   if (currentObject.__constructorName == "AdjacencyList") {
+//     const visGraph = [`subgraph cluster_adjacency_list_${id} {`];
+//     visGraph.push(`edge [arrowhead="normal"]`);
+//     visGraph.push(`node [shape="oval"]`);
+
+//     labels.push(
+//       `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
+//     );
+//     labels.push(`<TR><TD COLSPAN="100%">Adjacency list</TD></TR>`);
+
+//     const properties = Object.getOwnPropertyNames(currentObject).filter(
+//       (x) => x != "__uniqueid" && x != "__constructorName"
+//     );
+
+//     for (let property of properties) {
+//       const cols = [];
+//       for (let adj of currentObject[property]) {
+//         visGraph.push(`${property} -> ${adj}`);
+//         cols.push(`<TD>${DotEscapeString(adj)}</TD>`);
+//       }
+
+//       labels.push(
+//         `<TR><TD PORT="${DotEscapeString(property)}">${DotEscapeString(
+//           property + " ==> "
+//         )}</TD>${cols.join("")}</TR>`
+//       );
+//     }
+
+//     labels.push(`</TABLE>`);
+//     attrs.push(`label=<${labels.join("")}>`);
+
+//     visGraph.push("}");
+//     if (properties.length > 0) {
+//       relationshipMarkup.push(visGraph.join("\n"));
+//       relationshipMarkup.push(
+//         `"${DotEscapeString(id)}" -> "${
+//           properties[0]
+//         }" [ltail="${DotEscapeString(
+//           `cluster_adjacency_list_${id}" label="image" style=dashed arrowhead=curve, arrowtail=dot]`
+//         )}`
+//       );
+//     }
+//   } else if (currentObject.__constructorName == "BinaryNode") {
+//     labels.push(
+//       `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
+//     );
+//     labels.push(`<TR><TD COLSPAN="2">val : ${currentObject.val}</TD></TR>`);
+//     labels.push(
+//       `<TR><TD PORT="left">left</TD><TD PORT="right">right</TD></TR>`
+//     );
+//     labels.push(`</TABLE>`);
+//     if (currentObject.left != null) {
+//       relationshipMarkup.push(
+//         // left / right ports here seem to make layout worse
+//         `"${DotEscapeString(id)}" -> ${
+//           currentObject.left.__uniqueid
+//         } [color="${color}" fontcolor="${color}" decorate="true" headlabel="left"]`
+//       );
+//     }
+//     if (currentObject.right != null) {
+//       relationshipMarkup.push(
+//         `"${DotEscapeString(id)}" -> ${
+//           currentObject.right.__uniqueid
+//         } [color="${color}" fontcolor="${color}" decorate="true" headlabel="right"]`
+//       );
+//     }
+//   } else {
+//     labels.push(
+//       `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
+//     );
+//     labels.push(`<TR><TD COLSPAN="2">${type}(${length})</TD></TR>`);
+//     Object.getOwnPropertyNames(currentObject).forEach((key) => {
+//       const currentProperty = currentObject[key];
+//       if (
+//         (typeof currentProperty == "object" ||
+//           typeof currentProperty == "function") &&
+//         currentProperty != null
+//       ) {
+//         relationshipMarkup.push(
+//           `"${DotEscapeString(id)}":"${DotEscapeString(key)}":e -> ${
+//             currentProperty.__uniqueid
+//           }:w [color="${color}" fontcolor="${color}" decorate="true" headlabel="${DotEscapeString(
+//             key
+//           )}"]`
+//         );
+
+//         labels.push(
+//           `<TR><TD>#${DotEscapeString(key)}</TD><TD PORT="${DotEscapeString(
+//             key
+//           )}">object</TD></TR>`
+//         );
+//       } else if (key != "__uniqueid" && key != "__constructorName") {
+//         labels.push(
+//           `<TR><TD>#${DotEscapeString(key)}</TD><TD PORT="${DotEscapeString(
+//             key
+//           )}">${DotEscapeString(currentObject[key])}</TD></TR>`
+//         );
+//       }
+//     });
+
+//     labels.push(`</TABLE>`);
+//   }
+//   attrs.push(`label=<${labels.join("")}>`);
+//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
+//   attrs.push(`color="${color}"`);
+//   attrs.push(`fillcolor="${color}"`);
+//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
+//   return { objectMarkup, relationshipMarkup };
+// }
+
+// function visualizeDot({ objects, enclosed, variables }, stack = []) {
+//   const stackvis = [];
+//   const subgraphs = [];
+//   const objs = [];
+//   const rels = [];
+//   const styles = [];
+
+//   console.log(stack);
+
+//   if (stack.length > 0) {
+//     const subgraph = [`subgraph cluster_stack_vis {`];
+//     subgraph.push("peripheries=1;");
+//     subgraph.push("rankdir=BT;");
+//     subgraph.push("nodesep=.1;");
+//     subgraph.push("ranksep=.1;");
+
+//     const frames = [];
+//     for (let frame of stack) {
+//       const { objectMarkup, relationshipMarkup } = objToDot(frame);
+//       frames.push(objectMarkup);
+//       frames.push(relationshipMarkup);
+//     }
+//     if (stack.length > 1) {
+//       subgraph.push(
+//         `{rank=same ${stack
+//           .map((x) => `"${x.__uniqueid}"`)
+//           .join(" -> ")} [style=invis]}`
+//       );
+//     }
+//     subgraph.push(frames.join(""));
+
+//     subgraph.push("}");
+//     stackvis.push(subgraph.join("\n"));
+//   }
+
+//   const objVars = new Map();
+//   variables.keys().forEach((name) => {
+//     const val = variables.get(name);
+
+//     const color = getColorForString(name);
+
+//     const displayName = DotEscapeString(name);
+//     const displayTooltip = `Variable ${displayName}`;
+//     if (typeof val == "object" && val != null) {
+//       const id = val.id;
+
+//       objs.push(
+//         `"${displayName}"[shape="signature" color="${color}" label="${displayName}" tooltip="${displayTooltip}"]`
+//       );
+//       if (enclosed.has(id)) {
+//         rels.push(
+//           `"${displayName}":e -> "${enclosed.get(
+//             id
+//           )}" [color="${color}" constraint=false]`
+//         );
+//       } else {
+//         rels.push(
+//           `"${displayName}":e -> "${id}" [color="${color}" constraint=false]`
+//         );
+//       }
+//     } else {
+//       objs.push(
+//         `"${displayName}"[shape="signature" color="${color}" label="${displayName}: ${
+//           val ? val.toString() : val
+//         }" tooltip="${displayTooltip}"]`
+//       );
+//       // Cater for string pointers
+//       if (Number.isInteger(val) && val >= 0) {
+//         const [stringName, ...rest] = displayName.split(/_(.*)/s);
+//         if (
+//           variables.has(stringName) &&
+//           variables.get(stringName) instanceof ObjectPointer &&
+//           objects.has(variables.get(stringName).id) &&
+//           objects.get(variables.get(stringName).id) instanceof String &&
+//           val < objects.get(variables.get(stringName).id).length
+//         ) {
+//           rels.push(
+//             `"${displayName}":e -> ${
+//               objects.get(variables.get(stringName).id).__uniqueid
+//             }:${val} [color="${color}" constraint=false]`
+//           );
+//         }
+//       }
+//     }
+//   });
+
+//   // Binary tree nodes in the data set
+//   const binaryTreeNodes = new Map();
+
+//   objects.keys().forEach((id) => {
+//     if (enclosed.has(id)) {
+//       return; // don't include objects that are already rendered in a 2d graph
+//     }
+//     const currentObject = objects.get(id);
+
+//     if (currentObject.__constructorName == "BinaryNode") {
+//       binaryTreeNodes.set(currentObject.__uniqueid, currentObject);
+//       return; // don't include binary tree nodes that will be in subgraphs
+//     }
+
+//     const objVariables = objVars.has(id) ? Array.from(objVars.get(id)) : [];
+//     const { objectMarkup, relationshipMarkup } = toDot(
+//       id,
+//       currentObject,
+//       objVariables
+//     );
+
+//     objs.push(objectMarkup);
+//     if (relationshipMarkup.length > 0) {
+//       rels.push(...relationshipMarkup);
+//     }
+//   });
+
+//   const nonRootNodes = new Set();
+//   for (let id of binaryTreeNodes.keys()) {
+//     let node = binaryTreeNodes.get(id);
+//     nonRootNodes.add(node.left?.__uniqueid);
+//     nonRootNodes.add(node.right?.__uniqueid);
+//   }
+//   for (let id of nonRootNodes) {
+//     binaryTreeNodes.delete(id);
+//   }
+//   const trees = new Map();
+//   for (let [key, tree] of binaryTreeNodes) {
+//     const gap = 0.1;
+//     const width = 1;
+//     const maxTreeHeight = treeHeight(tree);
+//     const n = new DummyBinaryNode(tree, maxTreeHeight, key);
+//     let levels = [];
+//     treeLevels(n, 0, levels);
+
+//     const subgraph = [`subgraph cluster_binarytree_${n.__uniqueid} {`];
+//     subgraph.push("peripheries=0;");
+
+//     for (let levelNum = 0; levelNum < levels.length; levelNum++) {
+//       const level = levels[levelNum];
+//       const paddingWidth =
+//         Math.pow(2, maxTreeHeight - levelNum) * gap +
+//         (Math.pow(2, maxTreeHeight - levelNum) - 1) * width;
+//       const paddingNodes = [];
+//       for (let node of level) {
+//         const id = node.__uniqueid;
+
+//         const val = node.val;
+//         const color = getColorForId(id);
+//         const relationshipMarkup = [];
+//         const attrs = [];
+//         const labels = [];
+
+//         labels.push(
+//           `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
+//         );
+//         labels.push(`<TR><TD COLSPAN="2">${DotEscapeString(val)}</TD></TR>`);
+//         labels.push(
+//           `<TR><TD PORT="left">left</TD><TD PORT="right">right</TD></TR>`
+//         );
+//         labels.push(`</TABLE>`);
+//         if (node.left != null) {
+//           const style = !Number.isInteger(node.left.__uniqueid)
+//             ? "style=invis" // style=invis
+//             : "";
+//           relationshipMarkup.push(
+//             `"${DotEscapeString(id)}":"left" -> ${
+//               node.left.__uniqueid
+//             } [color="${color}" fontcolor="${color}" decorate="true" headlabel="left" ${style}]`
+//           );
+
+//           relationshipMarkup.push(
+//             `"${DotEscapeString(id)}" -> "p-${
+//               node.left.__uniqueid
+//             }" [style=invis]` // style=invis
+//           );
+
+//           paddingNodes.push(
+//             `"p-${node.left.__uniqueid}" [width=${paddingWidth} style=invis]` // style=invis
+//           );
+//         }
+
+//         if (node.right != null) {
+//           const style = !Number.isInteger(node.right.__uniqueid)
+//             ? "style=invis" //style=invis
+//             : "";
+//           relationshipMarkup.push(
+//             `"${DotEscapeString(id)}":"right" -> ${
+//               node.right.__uniqueid
+//             } [color="${color}" fontcolor="${color}" decorate="true" headlabel="right" ${style}]`
+//           );
+//           paddingNodes.push(
+//             `"p-${node.right.__uniqueid}" [width=${0} style=invis]` // style=invis
+//           );
+//         }
+//         attrs.push(`width=1`);
+//         attrs.push(`label=<${labels.join("")}>`);
+//         attrs.push(`tooltip="Node"`);
+//         attrs.push(`color="${color}"`);
+//         attrs.push(`fillcolor="${color}"`);
+//         if (!Number.isInteger(id)) {
+//           attrs.push(`style=invis`); // style=invis
+//         }
+
+//         const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
+
+//         subgraph.push(objectMarkup);
+//         subgraph.push(relationshipMarkup.join("\n"));
+//       }
+//       paddingNodes.pop(); // remove last padding right...
+//       subgraph.push(paddingNodes.join("\n"));
+
+//       if (level.length > 1) {
+//         let levelOrder = level
+//           .map((x) => `"${x.__uniqueid}" -> "p-${x.__uniqueid}"`)
+//           .join(" -> ");
+//         levelOrder = levelOrder.substring(0, levelOrder.lastIndexOf("->")); // remove last padding right
+
+//         levelOrder = `{rank=same ${levelOrder} [style=invis]}`; // style=invis
+
+//         subgraph.push(levelOrder);
+//       }
+//     }
+
+//     subgraph.push("}");
+
+//     subgraphs.push(subgraph.join("\n"));
+//   }
+
+//   // trees render better without splines.
+//   // ideally we would set this only for the tree subgraphs
+//   // but it's a graph level attribute
+//   const splines = binaryTreeNodes.size > 0 ? "splines=false;" : "";
+//   const rankdir = binaryTreeNodes.size > 0 ? "TB" : "LR";
+
+//   return `
+//   digraph structs {
+//       nodesep=0.3;
+//       ranksep=0.2;
+//       margin="1.5,0.5";
+//       rankdir=${rankdir};
+//       packMode="graph";
+//       tooltip="state visualisation";
+//       labeljust=l;
+//       ${splines}
+
+//       node [shape=plaintext ordering="out"];
+//       edge [arrowhead="none"];
+
+//       ${stackvis.join("\n")}
+//       ${subgraphs.join("\n")}
+//       ${objs.join("\n")}
+//       ${rels.join("\n")}
+//       ${styles.join("\n")}
+//       }
+
+//   }
+//     `;
+// }
 
 class DummyBinaryNode {
   constructor(node, depth, prefix, dummyNodeNumbers = []) {
