@@ -46,8 +46,6 @@ const Dot = (function () {
       relationshipMarkups.push(...relationshipMarkup);
     } else if (currentObject instanceof Array || currentObject instanceof Map) {
       const { labelMarkup, relationshipMarkup } = keyValContent(currentObject);
-      console.log(labelMarkup);
-      console.log(relationshipMarkup);
       labels.push(...labelMarkup);
       relationshipMarkups.push(...relationshipMarkup);
     } else if (
@@ -84,7 +82,7 @@ const Dot = (function () {
     };
   }
   function stringContent(currentObject) {
-    const header = [`<TD>String</TD>`];
+    const header = [`<TD PORT="_main">String</TD>`];
     const cols = [`<TD></TD>`];
     for (let i = 0; i < currentObject.length; i++) {
       header.push(`<TD>${i}</TD>`);
@@ -99,7 +97,9 @@ const Dot = (function () {
     const type = currentObject.constructor.name;
     return {
       labelMarkup: [
-        `<TR><TD>${type}</TD><TD>${escape(currentObject.toString())}</TD></TR>`,
+        `<TR><TD PORT="_main">${type}</TD><TD>${escape(
+          currentObject.toString()
+        )}</TD></TR>`,
       ],
       relationshipMarkup: [],
     };
@@ -108,7 +108,9 @@ const Dot = (function () {
   function dateContent(currentObject) {
     return {
       labelMarkup: [
-        `<TR><TD>Date</TD><TD>${escape(currentObject.toISOString())}</TD></TR>`,
+        `<TR><TD PORT="_main">Date</TD><TD>${escape(
+          currentObject.toISOString()
+        )}</TD></TR>`,
       ],
       relationshipMarkup: [],
     };
@@ -121,7 +123,7 @@ const Dot = (function () {
 
     return {
       labelMarkup: [
-        `<TR><TD>${escape(currentObject.functionName)}(${escape(
+        `<TR><TD PORT="_main">${escape(currentObject.functionName)}(${escape(
           currentObject.params.join(",")
         )})</TD><TD>${bodyText}</TD></TR>`,
       ],
@@ -130,7 +132,9 @@ const Dot = (function () {
   }
   function nonRenderableContent(currentObject) {
     return {
-      labelMarkup: [`<TR><TD>${type}</TD><TD>Not renderable</TD></TR>`],
+      labelMarkup: [
+        `<TR><TD PORT="_main">${type}</TD><TD>Not renderable</TD></TR>`,
+      ],
       relationshipMarkup: [],
     };
   }
@@ -140,7 +144,9 @@ const Dot = (function () {
     const color = getColorForId(id);
     const labelMarkup = [];
     const relationshipMarkup = [];
-    labelMarkup.push(`<TR><TD>${type}(${currentObject.size})</TD></TR>`);
+    labelMarkup.push(
+      `<TR><TD PORT="_main">${type}(${currentObject.size})</TD></TR>`
+    );
     currentObject.forEach((value) => {
       if (
         (typeof value == "object" || typeof value == "function") &&
@@ -166,7 +172,7 @@ const Dot = (function () {
       for (let i = 0; i < currentObject[0].length; i++) {
         cols.push(`<TD>#${i}</TD>`);
       }
-      labelMarkup.push(`<TR><TD>2D</TD>${cols.join("")}</TR>`);
+      labelMarkup.push(`<TR><TD PORT="_main">2D</TD>${cols.join("")}</TR>`);
       currentObject.forEach((row, key) => {
         const r = row.map((x) => `<TD>${x}</TD>`).join("");
         labelMarkup.push(
@@ -208,16 +214,19 @@ const Dot = (function () {
     return { labelMarkup, relationshipMarkup };
   }
   function adjacencyListContent(currentObject) {
+    const id = currentObject.__uniqueid;
     const relationshipMarkup = [];
     const subgraphMarkup = [`subgraph cluster_adjacency_list_${id} {`];
     subgraphMarkup.push(`edge [arrowhead="normal"]`);
     subgraphMarkup.push(`node [shape="oval"]`);
 
-    const labeslMarkup = [];
+    const labelMarkup = [];
     labelMarkup.push(
       `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
     );
-    labelMarkup.push(`<TR><TD COLSPAN="100%">Adjacency list</TD></TR>`);
+    labelMarkup.push(
+      `<TR><TD PORT="_main" COLSPAN="100%">Adjacency list</TD></TR>`
+    );
 
     const properties = Object.getOwnPropertyNames(currentObject).filter(
       (x) => x != "__uniqueid" && x != "__constructorName"
@@ -258,7 +267,9 @@ const Dot = (function () {
     const relationshipMarkup = [];
     const type = currentObject.constructor.name;
 
-    labelMarkup.push(`<TR><TD COLSPAN="2">${type}(${length})</TD></TR>`);
+    labelMarkup.push(
+      `<TR><TD PORT="_main" COLSPAN="2">${type}(${length})</TD></TR>`
+    );
     Object.getOwnPropertyNames(currentObject).forEach((key) => {
       const currentProperty = currentObject[key];
       if (
@@ -291,29 +302,76 @@ const Dot = (function () {
     return { labelMarkup, relationshipMarkup };
   }
 
+  function stackFrameRender(frame) {
+    const id = frame.__uniqueid;
+    const color = getColorForId(id);
+    const labels = [];
+    const references = [];
+    const type = frame.constructor.name;
+
+    labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
+    labels.push(`<TR><TD PORT="_main" COLSPAN="2">${frame.name}</TD></TR>`);
+    Object.getOwnPropertyNames(frame.values).forEach((key) => {
+      const currentProperty = frame.values[key];
+      if (
+        (typeof currentProperty == "object" ||
+          typeof currentProperty == "function") &&
+        currentProperty != null
+      ) {
+        references.push(
+          `"${escape(id)}":"${escape(key)}" -> ${escape(
+            currentProperty.__uniqueid
+          )}:"_main" [color="${color}" fontcolor="${color}" decorate="true" headlabel="${escape(
+            key
+          )}" constraint=false]`
+        );
+
+        labels.push(
+          `<TR><TD>#${escape(key)}</TD><TD PORT="${escape(
+            key
+          )}">object</TD></TR>`
+        );
+      } else if (key != "__uniqueid" && key != "__constructorName") {
+        labels.push(
+          `<TR><TD>#${escape(key)}</TD><TD PORT="${escape(key)}">${escape(
+            frame.values[key]
+          )}</TD></TR>`
+        );
+      }
+    });
+
+    labels.push(`</TABLE>`);
+    const attrs = [];
+    attrs.push(`label=<${labels.join("")}>`);
+    attrs.push(`tooltip="${escape(type)}"`);
+    attrs.push(`color="${color}"`);
+    attrs.push(`fillcolor="${color}"`);
+    const frameMarkup = `"${id}" [${attrs.join(" ")}]`;
+    return { id, frameMarkup, references };
+  }
+
   function vizStack(stack) {
     const subgraph = [`subgraph cluster_stack_vis {`];
+    subgraph.push(`label="Stack";`);
     subgraph.push("peripheries=1;");
-    subgraph.push("rankdir=BT;");
-    subgraph.push("nodesep=.1;");
-    subgraph.push("ranksep=.1;");
+    subgraph.push(`rankdir="BT";`);
+    subgraph.push("nodesep=0;");
+    subgraph.push("ranksep=0;");
 
+    const edges = [];
     const frames = [];
+    const ids = [];
     for (let frame of stack) {
-      const { objectMarkup, relationshipMarkup } = objContent(frame);
-      frames.push(objectMarkup);
-      frames.push(relationshipMarkup);
+      const { id, frameMarkup, references } = stackFrameRender(frame);
+      frames.push(frameMarkup);
+      edges.push(...references);
+      ids.push(id);
     }
-    if (stack.length > 1) {
-      subgraph.push(
-        `{rank=same ${stack
-          .map((x) => `"${x.__uniqueid}"`)
-          .join(" -> ")} [style=invis]}`
-      );
-    }
-    subgraph.push(frames.join(""));
+    subgraph.push(frames.join("\n"));
+    subgraph.push(`{ ${ids.reverse().join(" -> ")}  [arrowhead="inv"]}`);
 
     subgraph.push("}");
+    subgraph.push(...edges);
     return subgraph.join("\n");
   }
 
@@ -344,13 +402,13 @@ const Dot = (function () {
         );
         if (enclosed.has(id)) {
           edges.push(
-            `"${displayName}":e -> "${enclosed.get(
+            `"${displayName}":e -> ${enclosed.get(
               id
-            )}" [color="${color}" constraint=false]`
+            )} [color="${color}" constraint=false]`
           );
         } else {
           edges.push(
-            `"${displayName}":e -> "${id}" [color="${color}" constraint=false]`
+            `"${displayName}" -> "${id}":"_main" [color="${color}" constraint=false]`
           );
         }
       } else {
@@ -444,7 +502,9 @@ const Dot = (function () {
           labels.push(
             `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
           );
-          labels.push(`<TR><TD COLSPAN="2">${escape(val)}</TD></TR>`);
+          labels.push(
+            `<TR><TD COLSPAN="2" PORT="_main">${escape(val)}</TD></TR>`
+          );
           labels.push(
             `<TR><TD PORT="left">left</TD><TD PORT="right">right</TD></TR>`
           );
@@ -527,7 +587,7 @@ digraph structs {
     ranksep=0.2;
     margin="1.5,0.5";
     rankdir=${rankdir};
-    packMode="graph";
+    packMode="node";
     tooltip="state visualisation";
     labeljust=l;
     ${splines}
@@ -563,7 +623,7 @@ const config = {
     // Polyfill for maps, sets & weakmaps https://github.com/anonyco/Javascript-Fast-Light-Map-WeakMap-Set-And-WeakSet-JS-Polyfill/tree/master
     `"undefined"!=typeof Map&&Map.prototype.keys&&"undefined"!=typeof Set&&Set.prototype.keys||function(){"use-strict";function t(t,e){if(e===e)return t.indexOf(e);for(i=0,n=t.length;t[i]===t[i]&&++i!==n;);return i}var e,i,n,r,s,o,h={"delete":function(i){return e=t(this.k,i),~e?(this.k.splice(e,1),this.v.splice(e,1),--this.size,!0):!1},get:function(e){return this.v[t(this.k,e)]},set:function(i,n){return e=t(this.k,i),~e||(this.k[e=this.size++]=i),this.v[e]=n,this},has:function(e){return t(this.k,e)>-1},clear:function(){this.k.length=this.v.length=this.size=0},forEach:function(t,e){e&&(t=t.bind(e));for(var i=-1,n=this.size;++i!==n;)t(this.v[i],this.k[i],this)},entries:function(){var t=0,e=this;return{next:function(){return t!==e.size?{value:[e.k[t++],e.v[t]],done:!1}:{done:!0}}}},keys:function(){var t=0,e=this;return{next:function(){return t!==e.size?{value:e.k[t++],done:!1}:{done:!0}}}},values:function(){var t=0,e=this;return{next:function(){return t!==e.size?{value:e.v[t++],done:!1}:{done:!0}}}},toString:function(){return"[object Map]"}};WeakMap=Map=function(e){if(r=this.k=[],s=this.v=[],n=0,void 0!==e&&null!==e){if(o=Object(e),i=+o.length,i!=i)throw new TypeError("("+(e.toString||o.toString)()+") is not iterable");for(;i--;){if(!(o[i]instanceof Object))throw new TypeError("Iterator value "+o[i]+" is not an entry object");~t(r,o[i][0])||(r[n]=o[i][0],s[n++]=o[i][1])}r.reverse(),s.reverse()}this.size=n},Map.prototype=h,WeakSet=Set=function(e){if(r=this.k=this.v=[],n=0,void 0!==e&&null!==e){if(o=Object(e),i=+o.length,i!=i)throw new TypeError("("+(e.toString||o.toString)()+") is not iterable");for(;i--;)~t(r,o[i])||(r[n++]=o[i]);r.reverse()}this.size=n},Set.prototype={"delete":function(i){return e=t(this.k,i),~e?(this.k.splice(e,1),--this.size,!0):!1},add:function(i){return e=t(this.k,i),~e||(e=this.size++),this.k[e]=i,this},has:h.has,clear:h.clear,forEach:h.forEach,entries:h.entries,keys:h.keys,values:h.keys,toString:function(){return"[object Set]"}}}();`,
   ],
-  //  postfixes: [], // @TODO amend step function to make sure we don't trigger on ay postfix code.
+  //  postfixes: [], // @TODO amend step function to make sure we don't trigger on any postfix code.
   classReg:
     /(?:var[\s]+)(?<name>[\p{L}_$]+[\p{L}_$0-9]*).*__PURE__.*_createClass/gu,
   colorWheel: [
@@ -700,9 +760,9 @@ class VariableStore {
     return false;
   }
 
-  update(scopeObj) {
+  update(interpreter, stack) {
     this.prev = this.current;
-    this.current = getVariables(scopeObj);
+    this.current = getVariables(interpreter, stack);
   }
 }
 
@@ -740,12 +800,12 @@ class StateManager {
   }
 
   update() {
-    this.updateVariables();
     this.updateStack();
+    this.updateVariables();
   }
 
   updateVariables() {
-    this.variables.update(this.interpreter.getScope().object);
+    this.variables.update(this.interpreter, this.stack);
   }
 
   updateStack() {
@@ -761,16 +821,21 @@ class StateManager {
         const scope = {
           __uniqueid: "stack_frame_" + this.stack.length,
           name: callFrame.node.callee.name,
-          //args: callFrame.node.arguments,
+          // args: callFrame.node.arguments,
+          // callFrame: callFrame,
         };
         this.stack.push(scope);
         if (i < vmStack.length - 1) {
           const blockscope = vmStack[i + 1].scope.object.properties;
-
           scope.values = {};
           for (let property of Object.getOwnPropertyNames(blockscope)) {
             if (property != "arguments" && property != "this") {
-              if (typeof blockscope[property] != "object") {
+              if (
+                typeof scope.values[property] == "object" ||
+                typeof scope.values[property] == "function"
+              ) {
+                scope.values[property] = blockscope[property]; // TODO ObjectPointer
+              } else {
                 scope.values[property] = blockscope[property];
               }
             }
@@ -954,7 +1019,6 @@ class StateManager {
   display(regardless = false) {
     if (regardless || this.variables.hasChanges) {
       const dot = Dot.toDOTMarkup(this.variables.current, this.stack);
-      console.log(dot);
       var graphviz = d3
         .select("#visualisation")
         .graphviz()
@@ -980,33 +1044,9 @@ class StateManager {
 
 const state = new StateManager();
 
-// state.getSample(
-//   "https://raw.githubusercontent.com/stephenirven/test-raw/refs/heads/main/samples/js/string/rle.js"
-// );
-state.getSample(`
-console.log("hello");
-console.log("hello");
-console.log("hello");
-
-
-const b = [[1,2,3],[4,5,6],[7,8,9]]
-
-
-console.log(fibonacci(5));
-
-function fibonacci(num, memo = []) {
-  if (memo[num] != undefined) return memo[num];
-
-  if (num == 0) return 0;
-  if (num == 1) return 1;
-
-  const val = fibonacci(num-1, memo) + fibonacci(num-2, memo);
-
-  memo[num] = val;
-  return val;
-}
-
-  `);
+state.getSample(
+  "https://raw.githubusercontent.com/stephenirven/test-raw/refs/heads/main/samples/js/string/rle.js"
+);
 
 async function parseButton() {
   state.displayError();
@@ -1072,8 +1112,6 @@ function stepButton() {
   }
 
   state.highlightSourceLines();
-
-  //const head = state.interpreter.getValueFromScope("head"); // TODO - Add traces for specific variables
 
   state.update();
   state.display();
@@ -1180,20 +1218,43 @@ function is2DRectArray(object) {
   return true;
 }
 
-function buildObjects(input, skipTypes, skipNames) {
+function buildObjects(input, skipTypes, skipNames, stack = []) {
   if (typeof input != "object" || !(input instanceof Interpreter.Object)) {
     return;
   }
-  console.log(input);
-  const enclosed = new Map();
+  const enclosed = new Set();
   const nativeObjects = new Map();
 
+  const propertyNames = new Set();
+
+  // Add objects referenced in stack frames
+  for (let i = 0; i < stack.length; i++) {
+    const frame = stack[i];
+    for (let property of Object.getOwnPropertyNames(frame.values)) {
+      if (!property != "__uniqueid" && property != "__constructorName") {
+        if (
+          typeof frame.values[property] == "object" ||
+          typeof frame.values[property] == "function"
+        ) {
+          propertyNames.add(frame.values[property]);
+        }
+      }
+    }
+  }
+
   for (let key of Object.keys(input.properties)) {
-    const currentObject = input.properties[key];
+    propertyNames.add(key);
+  }
+
+  for (let key of propertyNames) {
+    const currentObject =
+      typeof key == "object" || typeof key == "function"
+        ? key
+        : input.properties[key];
     if (
       currentObject &&
       typeof currentObject == "object" &&
-      !key.startsWith("_") &&
+      //!key.startsWith("_") &&
       !skipNames.has(key) &&
       !skipTypes.has(currentObject.class)
     ) {
@@ -1211,9 +1272,9 @@ function buildObjects(input, skipTypes, skipNames) {
         const id = obj.__uniqueid;
         if (!nativeObjects.has(id)) {
           if (is2DRectArray(obj)) {
-            for (let row in obj) {
+            for (let i = 0; i < obj.length; i++) {
               // We have special rendering for two dimensional arrays
-              enclosed.set(obj[row].__uniqueid, `${id}:${row}`);
+              enclosed.set(obj[i].__uniqueid, `"${id}":"${i}"`);
             }
           } else if (
             typeof obj == "object" &&
@@ -1235,7 +1296,7 @@ function buildObjects(input, skipTypes, skipNames) {
   return { objects: nativeObjects, enclosed: enclosed };
 }
 
-function GetRange(text, start, end) {
+function getRange(text, start, end) {
   if (
     start.line == null ||
     start.column == null ||
@@ -1262,10 +1323,10 @@ function getBodyText(nativeObj) {
     column: nativeObj.bodyLoc.end.column,
   });
 
-  return start && end ? GetRange(state.source, start, end) : "";
+  return start && end ? getRange(state.source, start, end) : "";
 }
 
-function getVariables(scopeObj) {
+function getVariables(interpreter, stack) {
   let variables = new Map();
   const skipNames = new Set([
     ...state.classesToIgnore,
@@ -1280,10 +1341,14 @@ function getVariables(scopeObj) {
     "alert",
   ]);
   const skipTypes = new Set([]);
+  const scopeObj = interpreter.getScope().object;
 
-  // const n = state.interpreter.getValueFromScope("n"); // TODO - Add traces for specific variables
-
-  const { objects, enclosed } = buildObjects(scopeObj, skipTypes, skipNames);
+  const { objects, enclosed } = buildObjects(
+    scopeObj,
+    skipTypes,
+    skipNames,
+    stack
+  );
 
   for (let key of Object.keys(scopeObj.properties)) {
     if (skipNames.has(key)) continue;
@@ -1313,674 +1378,6 @@ function DeepEqual(x, y) {
         ok(x).every((key) => DeepEqual(x[key], y[key]))
     : x === y;
 }
-
-// function DotEscapeString(data) {
-//   if (
-//     data instanceof Symbol ||
-//     data instanceof String ||
-//     typeof data == "string"
-//   ) {
-//     return data.replace(
-//       /[\u00A0-\u9999<>\&]/g,
-//       (i) => "&#" + i.charCodeAt(0) + ";"
-//     );
-//   }
-//   return data;
-// }
-
-// function toDot(id, currentObject, variables) {
-//   const type = currentObject.constructor.name;
-//   const color = getColorForNumericId(id);
-
-//   const attrs = [];
-
-//   const labels = [];
-//   switch (type) {
-//     case "Function":
-//       return funcToDot(currentObject);
-//       break;
-//     case "String":
-//       return stringToDot(currentObject);
-//       break;
-//     case "RegExp":
-//     case "Error":
-//       return stringifyToDot(currentObject);
-//       break;
-//     case "Date":
-//       return dateToDot(currentObject);
-//       break;
-//     case "Set":
-//       return valToDot(currentObject);
-//       break;
-//     case "Array":
-//     case "Map":
-//       return keyValToDot(currentObject);
-//       break;
-//     case "WeakSet":
-//     case "WeakMap":
-//       return notRenderableToDot(currentObject);
-//       break;
-//     default:
-//       return objToDot(currentObject);
-//   }
-//   // attrs.push(`tooltip="${DotEscapeString(type)}"`);
-
-//   // attrs.push(`color="${color}"`);
-//   // attrs.push(`fillcolor="${color}"`);
-
-//   // let objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-
-//   return {
-//     objectMarkup: objectMarkup,
-//     relationshipMarkup: relationshipMarkup,
-//   };
-// }
-
-// function notRenderableToDot(currentObject) {
-//   const id = currentObject.__uniqueid;
-//   const color = getColorForNumericId(id);
-
-//   const relationshipMarkup = [];
-//   const attrs = [];
-//   const type = currentObject.constructor.name;
-//   const labels = [];
-
-//   labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
-//   labels.push(`<TR><TD>${type}</TD><TD>Not renderable</TD></TR>`);
-//   labels.push(`</TABLE>`);
-//   attrs.push(`label=<${labels.join("")}>`);
-//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
-//   attrs.push(`color="${color}"`);
-//   attrs.push(`fillcolor="${color}"`);
-//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-//   return { objectMarkup, relationshipMarkup };
-// }
-
-// function valToDot(currentObject) {
-//   const id = currentObject.__uniqueid;
-//   const color = getColorForNumericId(id);
-
-//   const relationshipMarkup = [];
-//   const attrs = [];
-//   const type = currentObject.constructor.name;
-//   const labels = [];
-
-//   labels.push(
-//     `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-//   );
-//   labels.push(`<TR><TD>${type}(${currentObject.size})</TD></TR>`);
-//   currentObject.forEach((value) => {
-//     if (
-//       (typeof value == "object" || typeof value == "function") &&
-//       value != null
-//     ) {
-//       relationshipMarkup.push(
-//         `${id} -> ${value.__uniqueid}:w [color="${color}", fontcolor="${color}" label="has" decorate="true"]`
-//       );
-//     } else {
-//       labels.push(`<TR><TD>${DotEscapeString(value)}</TD></TR>`);
-//     }
-//   });
-//   labels.push(`</TABLE>`);
-//   attrs.push(`label=<${labels.join("")}>`);
-//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
-//   attrs.push(`color="${color}"`);
-//   attrs.push(`fillcolor="${color}"`);
-//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-//   return { objectMarkup, relationshipMarkup };
-// }
-
-// function stringifyToDot(currentObject) {
-//   const id = currentObject.__uniqueid;
-//   const color = getColorForNumericId(id);
-
-//   const relationshipMarkup = [];
-//   const attrs = [];
-//   const type = currentObject.constructor.name;
-//   const labels = [];
-
-//   labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
-//   labels.push(
-//     `<TR><TD>${type}</TD><TD>${DotEscapeString(
-//       currentObject.toString()
-//     )}</TD></TR>`
-//   );
-//   labels.push(`</TABLE>`);
-//   attrs.push(`label=<${labels.join("")}>`);
-//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
-//   attrs.push(`color="${color}"`);
-//   attrs.push(`fillcolor="${color}"`);
-//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-//   return { objectMarkup, relationshipMarkup };
-// }
-
-// function dateToDot(currentObject) {
-//   const id = currentObject.__uniqueid;
-//   const color = getColorForNumericId(id);
-
-//   const relationshipMarkup = [];
-//   const attrs = [];
-//   const type = currentObject.constructor.name;
-//   const labels = [];
-
-//   labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
-//   labels.push(
-//     `<TR><TD>${type}</TD><TD>${DotEscapeString(
-//       currentObject.toISOString()
-//     )}</TD></TR>`
-//   );
-//   labels.push(`</TABLE>`);
-//   attrs.push(`label=<${labels.join("")}>`);
-//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
-//   attrs.push(`color="${color}"`);
-//   attrs.push(`fillcolor="${color}"`);
-//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-//   return { objectMarkup, relationshipMarkup };
-// }
-
-// function stringToDot(currentObject) {
-//   const id = currentObject.__uniqueid;
-//   const color = getColorForNumericId(id);
-
-//   const relationshipMarkup = [];
-//   const attrs = [];
-//   const type = currentObject.constructor.name;
-//   const labels = [];
-
-//   labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
-
-//   const header = [`<TD>${type}</TD>`];
-//   const cols = [`<TD></TD>`];
-//   for (let i = 0; i < currentObject.length; i++) {
-//     header.push(`<TD>${i}</TD>`);
-//     cols.push(`<TD PORT="${i}">${currentObject[i]}</TD>`);
-//   }
-
-//   labels.push(`<TR>${header.join("")}</TR>`);
-//   labels.push(`<TR>${cols.join("")}</TR>`);
-//   labels.push(`</TABLE>`);
-//   attrs.push(`label=<${labels.join("")}>`);
-
-//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
-//   attrs.push(`color="${color}"`);
-//   attrs.push(`fillcolor="${color}"`);
-//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-//   return { objectMarkup, relationshipMarkup };
-// }
-
-// function keyValToDot(currentObject) {
-//   const id = currentObject.__uniqueid;
-//   const color = getColorForNumericId(id);
-
-//   const relationshipMarkup = [];
-//   const attrs = [];
-//   const type = currentObject.constructor.name;
-//   const labels = [];
-
-//   if (is2DRectArray(currentObject)) {
-//     labels.push(
-//       `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-//     );
-//     cols = [];
-//     for (let i = 0; i < currentObject[0].length; i++) {
-//       cols.push(`<TD>#${i}</TD>`);
-//     }
-//     labels.push(`<TR><TD>2D</TD>${cols.join("")}</TR>`);
-//     currentObject.forEach((row, key) => {
-//       const r = row.map((x) => `<TD>${x}</TD>`).join("");
-//       labels.push(
-//         `<TR><TD PORT="${DotEscapeString(key)}">#${DotEscapeString(
-//           key
-//         )}</TD>${r}</TR>`
-//       );
-//     });
-//     labels.push(`</TABLE>`);
-//     attrs.push(`label=<${labels.join("")}>`);
-//   } else {
-//     const length = type == "Array" ? currentObject.length : currentObject.size;
-
-//     labels.push(
-//       `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-//     );
-//     labels.push(`<TR><TD COLSPAN="2">${type}(${length})</TD></TR>`);
-
-//     currentObject.forEach((value, key) => {
-//       if (
-//         (typeof value == "object" || typeof value == "function") &&
-//         value != null
-//       ) {
-//         labels.push(
-//           `<TR><TD>#${DotEscapeString(key)}</TD><TD PORT="${DotEscapeString(
-//             key
-//           )}">object</TD></TR>`
-//         );
-//         relationshipMarkup.push(
-//           `"${DotEscapeString(id)}":"${DotEscapeString(key)}":e -> ${
-//             value.__uniqueid
-//           }:w [color="${color}" fontcolor="${color}" decorate="true" headlabel="${DotEscapeString(
-//             key
-//           )}"]`
-//         );
-//       } else {
-//         labels.push(
-//           `<TR><TD>#${key}</TD><TD PORT="${DotEscapeString(
-//             key
-//           )}">${DotEscapeString(value)}</TD></TR>`
-//         );
-//       }
-//     });
-//   }
-//   labels.push(`</TABLE>`);
-//   attrs.push(`label=<${labels.join("")}>`);
-
-//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
-//   attrs.push(`color="${color}"`);
-//   attrs.push(`fillcolor="${color}"`);
-//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-//   return { objectMarkup, relationshipMarkup };
-// }
-
-// function funcToDot(currentObject) {
-//   const id = currentObject.__uniqueid;
-//   const color = getColorForNumericId(id);
-
-//   const relationshipMarkup = [];
-//   const attrs = [];
-//   const type = currentObject.constructor.name;
-//   const labels = [];
-
-//   let bodyText = DotEscapeString(getBodyText(currentObject));
-//   if (bodyText.length > 15) {
-//     bodyText = bodyText.substring(0, 12) + "...";
-//   }
-//   labels.push`<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`;
-//   labels.push(
-//     `<TR><TD>${DotEscapeString(currentObject.functionName)}(${DotEscapeString(
-//       currentObject.params.join(",")
-//     )})</TD><TD>${bodyText}</TD></TR>`
-//   );
-//   labels.push(`</TABLE>`);
-//   attrs.push(`label=<${labels.join("")}>`);
-//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
-//   attrs.push(`color="${color}"`);
-//   attrs.push(`fillcolor="${color}"`);
-
-//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-//   return { objectMarkup, relationshipMarkup };
-// }
-
-// function objToDot(currentObject) {
-//   const id = currentObject.__uniqueid;
-//   const color = getColorForNumericId(id);
-//   const relationshipMarkup = [];
-//   const attrs = [];
-//   const type = currentObject.constructor.name;
-//   const labels = [];
-//   if (currentObject.__constructorName == "AdjacencyList") {
-//     const visGraph = [`subgraph cluster_adjacency_list_${id} {`];
-//     visGraph.push(`edge [arrowhead="normal"]`);
-//     visGraph.push(`node [shape="oval"]`);
-
-//     labels.push(
-//       `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-//     );
-//     labels.push(`<TR><TD COLSPAN="100%">Adjacency list</TD></TR>`);
-
-//     const properties = Object.getOwnPropertyNames(currentObject).filter(
-//       (x) => x != "__uniqueid" && x != "__constructorName"
-//     );
-
-//     for (let property of properties) {
-//       const cols = [];
-//       for (let adj of currentObject[property]) {
-//         visGraph.push(`${property} -> ${adj}`);
-//         cols.push(`<TD>${DotEscapeString(adj)}</TD>`);
-//       }
-
-//       labels.push(
-//         `<TR><TD PORT="${DotEscapeString(property)}">${DotEscapeString(
-//           property + " ==> "
-//         )}</TD>${cols.join("")}</TR>`
-//       );
-//     }
-
-//     labels.push(`</TABLE>`);
-//     attrs.push(`label=<${labels.join("")}>`);
-
-//     visGraph.push("}");
-//     if (properties.length > 0) {
-//       relationshipMarkup.push(visGraph.join("\n"));
-//       relationshipMarkup.push(
-//         `"${DotEscapeString(id)}" -> "${
-//           properties[0]
-//         }" [ltail="${DotEscapeString(
-//           `cluster_adjacency_list_${id}" label="image" style=dashed arrowhead=curve, arrowtail=dot]`
-//         )}`
-//       );
-//     }
-//   } else if (currentObject.__constructorName == "BinaryNode") {
-//     labels.push(
-//       `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-//     );
-//     labels.push(`<TR><TD COLSPAN="2">val : ${currentObject.val}</TD></TR>`);
-//     labels.push(
-//       `<TR><TD PORT="left">left</TD><TD PORT="right">right</TD></TR>`
-//     );
-//     labels.push(`</TABLE>`);
-//     if (currentObject.left != null) {
-//       relationshipMarkup.push(
-//         // left / right ports here seem to make layout worse
-//         `"${DotEscapeString(id)}" -> ${
-//           currentObject.left.__uniqueid
-//         } [color="${color}" fontcolor="${color}" decorate="true" headlabel="left"]`
-//       );
-//     }
-//     if (currentObject.right != null) {
-//       relationshipMarkup.push(
-//         `"${DotEscapeString(id)}" -> ${
-//           currentObject.right.__uniqueid
-//         } [color="${color}" fontcolor="${color}" decorate="true" headlabel="right"]`
-//       );
-//     }
-//   } else {
-//     labels.push(
-//       `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-//     );
-//     labels.push(`<TR><TD COLSPAN="2">${type}(${length})</TD></TR>`);
-//     Object.getOwnPropertyNames(currentObject).forEach((key) => {
-//       const currentProperty = currentObject[key];
-//       if (
-//         (typeof currentProperty == "object" ||
-//           typeof currentProperty == "function") &&
-//         currentProperty != null
-//       ) {
-//         relationshipMarkup.push(
-//           `"${DotEscapeString(id)}":"${DotEscapeString(key)}":e -> ${
-//             currentProperty.__uniqueid
-//           }:w [color="${color}" fontcolor="${color}" decorate="true" headlabel="${DotEscapeString(
-//             key
-//           )}"]`
-//         );
-
-//         labels.push(
-//           `<TR><TD>#${DotEscapeString(key)}</TD><TD PORT="${DotEscapeString(
-//             key
-//           )}">object</TD></TR>`
-//         );
-//       } else if (key != "__uniqueid" && key != "__constructorName") {
-//         labels.push(
-//           `<TR><TD>#${DotEscapeString(key)}</TD><TD PORT="${DotEscapeString(
-//             key
-//           )}">${DotEscapeString(currentObject[key])}</TD></TR>`
-//         );
-//       }
-//     });
-
-//     labels.push(`</TABLE>`);
-//   }
-//   attrs.push(`label=<${labels.join("")}>`);
-//   attrs.push(`tooltip="${DotEscapeString(type)}"`);
-//   attrs.push(`color="${color}"`);
-//   attrs.push(`fillcolor="${color}"`);
-//   const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-//   return { objectMarkup, relationshipMarkup };
-// }
-
-// function visualizeDot({ objects, enclosed, variables }, stack = []) {
-//   const stackvis = [];
-//   const subgraphs = [];
-//   const objs = [];
-//   const rels = [];
-//   const styles = [];
-
-//   console.log(stack);
-
-//   if (stack.length > 0) {
-//     const subgraph = [`subgraph cluster_stack_vis {`];
-//     subgraph.push("peripheries=1;");
-//     subgraph.push("rankdir=BT;");
-//     subgraph.push("nodesep=.1;");
-//     subgraph.push("ranksep=.1;");
-
-//     const frames = [];
-//     for (let frame of stack) {
-//       const { objectMarkup, relationshipMarkup } = objToDot(frame);
-//       frames.push(objectMarkup);
-//       frames.push(relationshipMarkup);
-//     }
-//     if (stack.length > 1) {
-//       subgraph.push(
-//         `{rank=same ${stack
-//           .map((x) => `"${x.__uniqueid}"`)
-//           .join(" -> ")} [style=invis]}`
-//       );
-//     }
-//     subgraph.push(frames.join(""));
-
-//     subgraph.push("}");
-//     stackvis.push(subgraph.join("\n"));
-//   }
-
-//   const objVars = new Map();
-//   variables.keys().forEach((name) => {
-//     const val = variables.get(name);
-
-//     const color = getColorForString(name);
-
-//     const displayName = DotEscapeString(name);
-//     const displayTooltip = `Variable ${displayName}`;
-//     if (typeof val == "object" && val != null) {
-//       const id = val.id;
-
-//       objs.push(
-//         `"${displayName}"[shape="signature" color="${color}" label="${displayName}" tooltip="${displayTooltip}"]`
-//       );
-//       if (enclosed.has(id)) {
-//         rels.push(
-//           `"${displayName}":e -> "${enclosed.get(
-//             id
-//           )}" [color="${color}" constraint=false]`
-//         );
-//       } else {
-//         rels.push(
-//           `"${displayName}":e -> "${id}" [color="${color}" constraint=false]`
-//         );
-//       }
-//     } else {
-//       objs.push(
-//         `"${displayName}"[shape="signature" color="${color}" label="${displayName}: ${
-//           val ? val.toString() : val
-//         }" tooltip="${displayTooltip}"]`
-//       );
-//       // Cater for string pointers
-//       if (Number.isInteger(val) && val >= 0) {
-//         const [stringName, ...rest] = displayName.split(/_(.*)/s);
-//         if (
-//           variables.has(stringName) &&
-//           variables.get(stringName) instanceof ObjectPointer &&
-//           objects.has(variables.get(stringName).id) &&
-//           objects.get(variables.get(stringName).id) instanceof String &&
-//           val < objects.get(variables.get(stringName).id).length
-//         ) {
-//           rels.push(
-//             `"${displayName}":e -> ${
-//               objects.get(variables.get(stringName).id).__uniqueid
-//             }:${val} [color="${color}" constraint=false]`
-//           );
-//         }
-//       }
-//     }
-//   });
-
-//   // Binary tree nodes in the data set
-//   const binaryTreeNodes = new Map();
-
-//   objects.keys().forEach((id) => {
-//     if (enclosed.has(id)) {
-//       return; // don't include objects that are already rendered in a 2d graph
-//     }
-//     const currentObject = objects.get(id);
-
-//     if (currentObject.__constructorName == "BinaryNode") {
-//       binaryTreeNodes.set(currentObject.__uniqueid, currentObject);
-//       return; // don't include binary tree nodes that will be in subgraphs
-//     }
-
-//     const objVariables = objVars.has(id) ? Array.from(objVars.get(id)) : [];
-//     const { objectMarkup, relationshipMarkup } = toDot(
-//       id,
-//       currentObject,
-//       objVariables
-//     );
-
-//     objs.push(objectMarkup);
-//     if (relationshipMarkup.length > 0) {
-//       rels.push(...relationshipMarkup);
-//     }
-//   });
-
-//   const nonRootNodes = new Set();
-//   for (let id of binaryTreeNodes.keys()) {
-//     let node = binaryTreeNodes.get(id);
-//     nonRootNodes.add(node.left?.__uniqueid);
-//     nonRootNodes.add(node.right?.__uniqueid);
-//   }
-//   for (let id of nonRootNodes) {
-//     binaryTreeNodes.delete(id);
-//   }
-//   const trees = new Map();
-//   for (let [key, tree] of binaryTreeNodes) {
-//     const gap = 0.1;
-//     const width = 1;
-//     const maxTreeHeight = treeHeight(tree);
-//     const n = new DummyBinaryNode(tree, maxTreeHeight, key);
-//     let levels = [];
-//     treeLevels(n, 0, levels);
-
-//     const subgraph = [`subgraph cluster_binarytree_${n.__uniqueid} {`];
-//     subgraph.push("peripheries=0;");
-
-//     for (let levelNum = 0; levelNum < levels.length; levelNum++) {
-//       const level = levels[levelNum];
-//       const paddingWidth =
-//         Math.pow(2, maxTreeHeight - levelNum) * gap +
-//         (Math.pow(2, maxTreeHeight - levelNum) - 1) * width;
-//       const paddingNodes = [];
-//       for (let node of level) {
-//         const id = node.__uniqueid;
-
-//         const val = node.val;
-//         const color = getColorForId(id);
-//         const relationshipMarkup = [];
-//         const attrs = [];
-//         const labels = [];
-
-//         labels.push(
-//           `<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">`
-//         );
-//         labels.push(`<TR><TD COLSPAN="2">${DotEscapeString(val)}</TD></TR>`);
-//         labels.push(
-//           `<TR><TD PORT="left">left</TD><TD PORT="right">right</TD></TR>`
-//         );
-//         labels.push(`</TABLE>`);
-//         if (node.left != null) {
-//           const style = !Number.isInteger(node.left.__uniqueid)
-//             ? "style=invis" // style=invis
-//             : "";
-//           relationshipMarkup.push(
-//             `"${DotEscapeString(id)}":"left" -> ${
-//               node.left.__uniqueid
-//             } [color="${color}" fontcolor="${color}" decorate="true" headlabel="left" ${style}]`
-//           );
-
-//           relationshipMarkup.push(
-//             `"${DotEscapeString(id)}" -> "p-${
-//               node.left.__uniqueid
-//             }" [style=invis]` // style=invis
-//           );
-
-//           paddingNodes.push(
-//             `"p-${node.left.__uniqueid}" [width=${paddingWidth} style=invis]` // style=invis
-//           );
-//         }
-
-//         if (node.right != null) {
-//           const style = !Number.isInteger(node.right.__uniqueid)
-//             ? "style=invis" //style=invis
-//             : "";
-//           relationshipMarkup.push(
-//             `"${DotEscapeString(id)}":"right" -> ${
-//               node.right.__uniqueid
-//             } [color="${color}" fontcolor="${color}" decorate="true" headlabel="right" ${style}]`
-//           );
-//           paddingNodes.push(
-//             `"p-${node.right.__uniqueid}" [width=${0} style=invis]` // style=invis
-//           );
-//         }
-//         attrs.push(`width=1`);
-//         attrs.push(`label=<${labels.join("")}>`);
-//         attrs.push(`tooltip="Node"`);
-//         attrs.push(`color="${color}"`);
-//         attrs.push(`fillcolor="${color}"`);
-//         if (!Number.isInteger(id)) {
-//           attrs.push(`style=invis`); // style=invis
-//         }
-
-//         const objectMarkup = `"${id}" [${attrs.join(" ")}]`;
-
-//         subgraph.push(objectMarkup);
-//         subgraph.push(relationshipMarkup.join("\n"));
-//       }
-//       paddingNodes.pop(); // remove last padding right...
-//       subgraph.push(paddingNodes.join("\n"));
-
-//       if (level.length > 1) {
-//         let levelOrder = level
-//           .map((x) => `"${x.__uniqueid}" -> "p-${x.__uniqueid}"`)
-//           .join(" -> ");
-//         levelOrder = levelOrder.substring(0, levelOrder.lastIndexOf("->")); // remove last padding right
-
-//         levelOrder = `{rank=same ${levelOrder} [style=invis]}`; // style=invis
-
-//         subgraph.push(levelOrder);
-//       }
-//     }
-
-//     subgraph.push("}");
-
-//     subgraphs.push(subgraph.join("\n"));
-//   }
-
-//   // trees render better without splines.
-//   // ideally we would set this only for the tree subgraphs
-//   // but it's a graph level attribute
-//   const splines = binaryTreeNodes.size > 0 ? "splines=false;" : "";
-//   const rankdir = binaryTreeNodes.size > 0 ? "TB" : "LR";
-
-//   return `
-//   digraph structs {
-//       nodesep=0.3;
-//       ranksep=0.2;
-//       margin="1.5,0.5";
-//       rankdir=${rankdir};
-//       packMode="graph";
-//       tooltip="state visualisation";
-//       labeljust=l;
-//       ${splines}
-
-//       node [shape=plaintext ordering="out"];
-//       edge [arrowhead="none"];
-
-//       ${stackvis.join("\n")}
-//       ${subgraphs.join("\n")}
-//       ${objs.join("\n")}
-//       ${rels.join("\n")}
-//       ${styles.join("\n")}
-//       }
-
-//   }
-//     `;
-// }
 
 class DummyBinaryNode {
   constructor(node, depth, prefix, dummyNodeNumbers = []) {
