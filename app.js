@@ -1044,7 +1044,6 @@ class StateManager {
   display(regardless = false) {
     if (regardless || this.variables.hasChanges) {
       const dot = Dot.toDOTMarkup(this.variables.current, this.stack);
-      console.log(dot);
       var graphviz = d3
         .select("#visualisation")
         .graphviz()
