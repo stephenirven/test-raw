@@ -821,7 +821,6 @@ class VariableStore {
       enclosed: new Map(),
     };
   }
-
   hasChanges() {
     const objKeys = new Set(this.current.objects.keys());
     const prevObjKeys = new Set(this.prev.objects.keys());
@@ -853,10 +852,9 @@ class VariableStore {
 
     return false;
   }
-
-  update(interpreter, stack) {
+  update(newVariables) {
     this.prev = this.current;
-    this.current = getVariables(interpreter, stack);
+    this.current = newVariables;
   }
 }
 
@@ -864,6 +862,7 @@ class StateManager {
   constructor() {
     this.variables = new VariableStore();
     this.stack = [];
+    this.oldStack_ = [];
     this.classesToIgnore = [];
     this.skipConstructors = new Set();
     this.source = "";
@@ -892,16 +891,13 @@ class StateManager {
     this.updateVariables = this.updateVariables.bind(this);
     this.updateStack = this.updateStack.bind(this);
   }
-
   update() {
     this.updateStack();
     this.updateVariables();
   }
-
   updateVariables() {
-    this.variables.update(this.interpreter, this.stack);
+    this.variables.update(this.getVariables(this.interpreter, this.stack));
   }
-
   updateStack() {
     const vmStack = state.interpreter.getStateStack();
 
@@ -938,7 +934,6 @@ class StateManager {
       }
     }
   }
-
   async getSample(sample) {
     if (sample.startsWith("http://") || sample.startsWith("https://")) {
       return fetch(sample)
@@ -972,7 +967,6 @@ class StateManager {
       window.Prism.highlightElement(this.elements.code_source);
     }
   }
-
   async parse() {
     this.transpile = Babel.transform(this.source, config.babelOptions);
     this.variables.reset();
@@ -1048,7 +1042,6 @@ class StateManager {
     // append any code after the snippet
     //this.interpreter.appendCode(config.postfixes.join(""));
   }
-
   updateSourceLines({ start, end }) {
     const newStart = this.originalPositionFor(start);
     const newEnd = this.originalPositionFor(end);
@@ -1059,14 +1052,12 @@ class StateManager {
       end: { line: newEnd.line, column: newEnd.column },
     };
   }
-
   sourceLinesChanged() {
     const same =
       this.locations.current.start.line == this.locations.prev.start.line &&
       this.locations.current.end.line == this.locations.prev.end.line;
     return !same;
   }
-
   sourceLinesValid() {
     if (
       this.locations.current.start.line == null ||
@@ -1079,7 +1070,6 @@ class StateManager {
   getSourceLines() {
     return [this.locations.current.start.line, this.locations.current.end.line];
   }
-
   highlightSourceLines() {
     this.elements.code_wrapper.setAttribute(
       "data-line",
@@ -1087,7 +1077,6 @@ class StateManager {
     );
     window.Prism.highlightElement(this.elements.code_source);
   }
-
   highlightErrorLines(error) {
     this.elements.code_wrapper.removeAttribute("data-line");
 
@@ -1109,7 +1098,6 @@ class StateManager {
       this.elements.status.innerText = "";
     }
   }
-
   display(regardless = false) {
     if (regardless || this.variables.hasChanges) {
       const dot = Dot.toDOTMarkup(this.variables.current, this.stack);
@@ -1127,12 +1115,213 @@ class StateManager {
       }
     }
   }
-
   originalPositionFor({ line, column }) {
     return this.sourceMapConsumer.originalPositionFor({
       line: line,
       column: column,
     });
+  }
+  getVariables(interpreter, stack) {
+    let variables = new Map();
+    const skipNames = new Set([
+      ...state.classesToIgnore,
+      "this",
+      "arguments",
+      "self",
+      "window",
+      "WeakMap",
+      "WeakSet",
+      "Map",
+      "Set",
+      "alert",
+    ]);
+    const skipTypes = new Set([]);
+    const scopeObj = interpreter.getScope().object;
+
+    if (
+      typeof scopeObj != "object" ||
+      !(scopeObj instanceof Interpreter.Object)
+    ) {
+      return;
+    }
+    const enclosed = new Set();
+    const objects = new Map();
+
+    const propertyNames = new Set();
+
+    // Add objects referenced in stack frames
+    for (let i = 0; i < stack.length; i++) {
+      const frame = stack[i];
+      for (let property of Object.getOwnPropertyNames(frame.values)) {
+        if (!property != "__uniqueid" && property != "__constructorName") {
+          if (
+            typeof frame.values[property] == "object" ||
+            typeof frame.values[property] == "function"
+          ) {
+            propertyNames.add(frame.values[property]);
+          }
+        }
+      }
+    }
+
+    for (let key of Object.keys(scopeObj.properties)) {
+      propertyNames.add(key);
+    }
+
+    for (let key of propertyNames) {
+      const currentObject =
+        typeof key == "object" || typeof key == "function"
+          ? key
+          : scopeObj.properties[key];
+      if (
+        currentObject &&
+        typeof currentObject == "object" &&
+        //!key.startsWith("_") &&
+        !skipNames.has(key) &&
+        !skipTypes.has(currentObject.class)
+      ) {
+        let cycle = {
+          pseudo: [],
+          native: [],
+        };
+        const nativeObj = state.interpreter.pseudoToNative(
+          currentObject,
+          cycle,
+          true
+        );
+
+        for (let obj of cycle.native) {
+          const id = obj.__uniqueid;
+          if (!objects.has(id)) {
+            if (is2DRectArray(obj)) {
+              for (let i = 0; i < obj.length; i++) {
+                // We have special rendering for two dimensional arrays
+                enclosed.set(obj[i].__uniqueid, `"${id}":"${i}"`);
+              }
+            } else if (
+              typeof obj == "object" &&
+              obj.__constructorName == "AdjacencyList"
+            ) {
+              // we have special rendering for AdjacencyLists
+              for (let property of Object.getOwnPropertyNames(obj)) {
+                if (
+                  property != "__uniqueid" &&
+                  property != "__constructorName"
+                ) {
+                  enclosed.set(obj[property].__uniqueid, `${id}:${property}`);
+                }
+              }
+            }
+            objects.set(id, obj);
+          }
+        }
+      }
+    }
+
+    for (let key of Object.keys(scopeObj.properties)) {
+      if (skipNames.has(key)) continue;
+      if (key.startsWith("_")) continue;
+
+      const val = scopeObj.properties[key];
+
+      if (typeof val == "object" && val != null && val != undefined) {
+        if (skipTypes.has(val.class)) {
+          continue;
+        }
+        variables.set(key, new ObjectPointer(val.__uniqueid));
+      } else {
+        variables.set(key, val);
+      }
+    }
+
+    return { objects, enclosed, variables };
+  }
+  isLine(stack) {
+    var currentState = stack[stack.length - 1];
+    var node = currentState.node;
+    var type = node.type;
+
+    // If the code is in the prefix, ignore it
+    if (node.loc.end.line == 1 && node.loc.end.column < state.prefixLength) {
+      return false;
+    }
+
+    if (
+      stack.filter((frame) => {
+        return (
+          frame.isConstructor &&
+          state.skipConstructors.has(frame.node?.callee?.name)
+        );
+      }).length > 0
+    ) {
+      return false;
+    }
+
+    if (type !== "VariableDeclaration" && type.substr(-9) !== "Statement") {
+      // Current node is not a statement.
+      return false;
+    }
+
+    if (type === "BlockStatement") {
+      // Not a 'line' by most definitions.
+      return false;
+    }
+
+    if (
+      type === "VariableDeclaration" &&
+      stack[stack.length - 2].node.type === "ForStatement"
+    ) {
+      // This 'var' is not a line: for (var i = 0; ...)
+      return false;
+    }
+
+    if (this.oldStack_[this.oldStack_.length - 1] === currentState) {
+      // Never repeat the same statement multiple times.
+      // Typically a statement is stepped into and out of.
+      return false;
+    }
+
+    if (
+      this.oldStack_.indexOf(currentState) !== -1 &&
+      type !== "ForStatement" &&
+      type !== "WhileStatement" &&
+      type !== "DoWhileStatement"
+    ) {
+      // Don't revisit a statement on the stack (e.g. 'if') when exiting.
+      // The exception is loops.
+      return false;
+    }
+
+    this.oldStack_ = stack.slice();
+    return true;
+  }
+  tryStep() {
+    try {
+      var ok = state.interpreter.step();
+      var error;
+    } finally {
+      if (!ok) {
+        if (state.interpreter.value?.stack) {
+          const [message, location] =
+            state.interpreter.value?.stack?.split("at code:");
+
+          const [trans_line, trans_column] = location.split(":").map(Number);
+
+          const errorLocation = state.sourceMapConsumer.originalPositionFor({
+            line: trans_line,
+            column: trans_column,
+          });
+          error = {
+            message: message,
+            location: errorLocation,
+          };
+          console.log("ERROR", error);
+        }
+
+        disable("disabled");
+      }
+      return [ok, error];
+    }
   }
 }
 
@@ -1165,9 +1354,11 @@ function stepButton() {
   while (
     state.interpreter.getStatus() == Interpreter.Status.STEP &&
     ok &&
-    (!state.sourceLinesValid() || !state.sourceLinesChanged() || !isLine(stack))
+    (!state.sourceLinesValid() ||
+      !state.sourceLinesChanged() ||
+      !state.isLine(stack))
   ) {
-    [ok, error] = tryStep();
+    [ok, error] = state.tryStep();
     stack = state.interpreter.getStateStack();
 
     node = stack[stack.length - 1].node;
@@ -1195,100 +1386,9 @@ function stepButton() {
   }
 }
 
-function tryStep() {
-  try {
-    var ok = state.interpreter.step();
-    var error;
-  } finally {
-    if (!ok) {
-      if (state.interpreter.value?.stack) {
-        const [message, location] =
-          state.interpreter.value?.stack?.split("at code:");
-
-        const [trans_line, trans_column] = location.split(":").map(Number);
-
-        const errorLocation = state.sourceMapConsumer.originalPositionFor({
-          line: trans_line,
-          column: trans_column,
-        });
-        error = {
-          message: message,
-          location: errorLocation,
-        };
-        console.log("ERROR", error);
-      }
-
-      disable("disabled");
-    }
-    return [ok, error];
-  }
-}
-
 function disable(disabled) {
   document.getElementById("stepButton").disabled = disabled;
 }
-
-// Is the current stack at the beginning of a new line?
-function isLine(stack) {
-  var currentState = stack[stack.length - 1];
-  var node = currentState.node;
-  var type = node.type;
-
-  // If the code is in the prefix, ignore it
-  if (node.loc.end.line == 1 && node.loc.end.column < state.prefixLength) {
-    return false;
-  }
-
-  if (
-    stack.filter((frame) => {
-      return (
-        frame.isConstructor &&
-        state.skipConstructors.has(frame.node?.callee?.name)
-      );
-    }).length > 0
-  ) {
-    return false;
-  }
-
-  if (type !== "VariableDeclaration" && type.substr(-9) !== "Statement") {
-    // Current node is not a statement.
-    return false;
-  }
-
-  if (type === "BlockStatement") {
-    // Not a 'line' by most definitions.
-    return false;
-  }
-
-  if (
-    type === "VariableDeclaration" &&
-    stack[stack.length - 2].node.type === "ForStatement"
-  ) {
-    // This 'var' is not a line: for (var i = 0; ...)
-    return false;
-  }
-
-  if (isLine.oldStack_[isLine.oldStack_.length - 1] === currentState) {
-    // Never repeat the same statement multiple times.
-    // Typically a statement is stepped into and out of.
-    return false;
-  }
-
-  if (
-    isLine.oldStack_.indexOf(currentState) !== -1 &&
-    type !== "ForStatement" &&
-    type !== "WhileStatement" &&
-    type !== "DoWhileStatement"
-  ) {
-    // Don't revisit a statement on the stack (e.g. 'if') when exiting.
-    // The exception is loops.
-    return false;
-  }
-
-  isLine.oldStack_ = stack.slice();
-  return true;
-}
-isLine.oldStack_ = [];
 
 function is2DRectArray(object) {
   if (!(object instanceof Array)) return false;
@@ -1310,125 +1410,4 @@ function is2DRectArray(object) {
     return false;
 
   return true;
-}
-
-function buildObjects(input, skipTypes, skipNames, stack = []) {
-  if (typeof input != "object" || !(input instanceof Interpreter.Object)) {
-    return;
-  }
-  const enclosed = new Set();
-  const nativeObjects = new Map();
-
-  const propertyNames = new Set();
-
-  // Add objects referenced in stack frames
-  for (let i = 0; i < stack.length; i++) {
-    const frame = stack[i];
-    for (let property of Object.getOwnPropertyNames(frame.values)) {
-      if (!property != "__uniqueid" && property != "__constructorName") {
-        if (
-          typeof frame.values[property] == "object" ||
-          typeof frame.values[property] == "function"
-        ) {
-          propertyNames.add(frame.values[property]);
-        }
-      }
-    }
-  }
-
-  for (let key of Object.keys(input.properties)) {
-    propertyNames.add(key);
-  }
-
-  for (let key of propertyNames) {
-    const currentObject =
-      typeof key == "object" || typeof key == "function"
-        ? key
-        : input.properties[key];
-    if (
-      currentObject &&
-      typeof currentObject == "object" &&
-      //!key.startsWith("_") &&
-      !skipNames.has(key) &&
-      !skipTypes.has(currentObject.class)
-    ) {
-      let cycle = {
-        pseudo: [],
-        native: [],
-      };
-      const nativeObj = state.interpreter.pseudoToNative(
-        currentObject,
-        cycle,
-        true
-      );
-
-      for (let obj of cycle.native) {
-        const id = obj.__uniqueid;
-        if (!nativeObjects.has(id)) {
-          if (is2DRectArray(obj)) {
-            for (let i = 0; i < obj.length; i++) {
-              // We have special rendering for two dimensional arrays
-              enclosed.set(obj[i].__uniqueid, `"${id}":"${i}"`);
-            }
-          } else if (
-            typeof obj == "object" &&
-            obj.__constructorName == "AdjacencyList"
-          ) {
-            // we have special rendering for AdjacencyLists
-            for (let property of Object.getOwnPropertyNames(obj)) {
-              if (property != "__uniqueid" && property != "__constructorName") {
-                enclosed.set(obj[property].__uniqueid, `${id}:${property}`);
-              }
-            }
-          }
-          nativeObjects.set(id, obj);
-        }
-      }
-    }
-  }
-
-  return { objects: nativeObjects, enclosed: enclosed };
-}
-
-function getVariables(interpreter, stack) {
-  let variables = new Map();
-  const skipNames = new Set([
-    ...state.classesToIgnore,
-    "this",
-    "arguments",
-    "self",
-    "window",
-    "WeakMap",
-    "WeakSet",
-    "Map",
-    "Set",
-    "alert",
-  ]);
-  const skipTypes = new Set([]);
-  const scopeObj = interpreter.getScope().object;
-
-  const { objects, enclosed } = buildObjects(
-    scopeObj,
-    skipTypes,
-    skipNames,
-    stack
-  );
-
-  for (let key of Object.keys(scopeObj.properties)) {
-    if (skipNames.has(key)) continue;
-    if (key.startsWith("_")) continue;
-
-    const val = scopeObj.properties[key];
-
-    if (typeof val == "object" && val != null && val != undefined) {
-      if (skipTypes.has(val.class)) {
-        continue;
-      }
-      variables.set(key, new ObjectPointer(val.__uniqueid));
-    } else {
-      variables.set(key, val);
-    }
-  }
-
-  return { objects, enclosed, variables };
 }
