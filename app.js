@@ -896,10 +896,10 @@ class StateManager {
     this.updateVariables();
   }
   updateVariables() {
-    this.variables.update(this.getVariables(this.interpreter, this.stack));
+    this.variables.update(this.getVariables());
   }
   updateStack() {
-    const vmStack = state.interpreter.getStateStack();
+    const vmStack = this.interpreter.getStateStack();
 
     this.stack = [];
     for (let i = 0; i < vmStack.length; i++) {
@@ -924,7 +924,7 @@ class StateManager {
                 typeof scope.values[property] == "object" ||
                 typeof scope.values[property] == "function"
               ) {
-                scope.values[property] = blockscope[property]; // TODO ObjectPointer
+                scope.values[property] = blockscope[property];
               } else {
                 scope.values[property] = blockscope[property];
               }
@@ -1121,10 +1121,10 @@ class StateManager {
       column: column,
     });
   }
-  getVariables(interpreter, stack) {
+  getVariables() {
     let variables = new Map();
     const skipNames = new Set([
-      ...state.classesToIgnore,
+      ...this.classesToIgnore,
       "this",
       "arguments",
       "self",
@@ -1136,7 +1136,7 @@ class StateManager {
       "alert",
     ]);
     const skipTypes = new Set([]);
-    const scopeObj = interpreter.getScope().object;
+    const scopeObj = this.interpreter.getScope().object;
 
     if (
       typeof scopeObj != "object" ||
@@ -1150,8 +1150,8 @@ class StateManager {
     const propertyNames = new Set();
 
     // Add objects referenced in stack frames
-    for (let i = 0; i < stack.length; i++) {
-      const frame = stack[i];
+    for (let i = 0; i < this.stack.length; i++) {
+      const frame = this.stack[i];
       for (let property of Object.getOwnPropertyNames(frame.values)) {
         if (!property != "__uniqueid" && property != "__constructorName") {
           if (
@@ -1184,7 +1184,7 @@ class StateManager {
           pseudo: [],
           native: [],
         };
-        const nativeObj = state.interpreter.pseudoToNative(
+        const nativeObj = this.interpreter.pseudoToNative(
           currentObject,
           cycle,
           true
@@ -1242,7 +1242,7 @@ class StateManager {
     var type = node.type;
 
     // If the code is in the prefix, ignore it
-    if (node.loc.end.line == 1 && node.loc.end.column < state.prefixLength) {
+    if (node.loc.end.line == 1 && node.loc.end.column < this.prefixLength) {
       return false;
     }
 
@@ -1250,7 +1250,7 @@ class StateManager {
       stack.filter((frame) => {
         return (
           frame.isConstructor &&
-          state.skipConstructors.has(frame.node?.callee?.name)
+          this.skipConstructors.has(frame.node?.callee?.name)
         );
       }).length > 0
     ) {
@@ -1297,17 +1297,17 @@ class StateManager {
   }
   tryStep() {
     try {
-      var ok = state.interpreter.step();
+      var ok = this.interpreter.step();
       var error;
     } finally {
       if (!ok) {
-        if (state.interpreter.value?.stack) {
+        if (this.interpreter.value?.stack) {
           const [message, location] =
-            state.interpreter.value?.stack?.split("at code:");
+            this.interpreter.value?.stack?.split("at code:");
 
           const [trans_line, trans_column] = location.split(":").map(Number);
 
-          const errorLocation = state.sourceMapConsumer.originalPositionFor({
+          const errorLocation = this.sourceMapConsumer.originalPositionFor({
             line: trans_line,
             column: trans_column,
           });
@@ -1322,6 +1322,40 @@ class StateManager {
       }
       return [ok, error];
     }
+  }
+  step() {
+    let error;
+    let stack = this.interpreter.getStateStack();
+    let node = stack[stack.length - 1].node;
+    let ok = true;
+    while (
+      this.interpreter.getStatus() == Interpreter.Status.STEP &&
+      ok &&
+      (!this.sourceLinesValid() ||
+        !this.sourceLinesChanged() ||
+        !this.isLine(stack))
+    ) {
+      [ok, error] = this.tryStep();
+      stack = this.interpreter.getStateStack();
+
+      node = stack[stack.length - 1].node;
+      this.updateSourceLines({ start: node.loc.start, end: node.loc.end });
+    }
+
+    if (ok) {
+      const status = Object.keys(Interpreter.Status).find(
+        (key) => Interpreter.Status[key] === this.interpreter.getStatus()
+      );
+      this.displayError(`Status: ${status}`);
+    } else {
+      this.highlightErrorLines(error);
+      this.displayError();
+    }
+
+    this.highlightSourceLines();
+
+    this.update();
+    this.display();
   }
 }
 
@@ -1346,44 +1380,7 @@ function runButton() {
 }
 
 function stepButton() {
-  //disable("disabled");
-
-  let stack = state.interpreter.getStateStack();
-  let node = stack[stack.length - 1].node;
-  let ok = true;
-  while (
-    state.interpreter.getStatus() == Interpreter.Status.STEP &&
-    ok &&
-    (!state.sourceLinesValid() ||
-      !state.sourceLinesChanged() ||
-      !state.isLine(stack))
-  ) {
-    [ok, error] = state.tryStep();
-    stack = state.interpreter.getStateStack();
-
-    node = stack[stack.length - 1].node;
-    state.updateSourceLines({ start: node.loc.start, end: node.loc.end });
-  }
-
-  if (ok) {
-    const status = Object.keys(Interpreter.Status).find(
-      (key) => Interpreter.Status[key] === state.interpreter.getStatus()
-    );
-    state.displayError(`Status: ${status}`);
-  } else {
-    state.highlightErrorLines(error);
-    state.displayError();
-  }
-
-  state.highlightSourceLines();
-
-  state.update();
-  state.display();
-
-  if (error) {
-    state.highlightErrorLines(error);
-    state.displayError(error);
-  }
+  state.step();
 }
 
 function disable(disabled) {
