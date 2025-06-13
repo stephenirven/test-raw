@@ -301,7 +301,6 @@ const Dot = (function () {
 
     return { labelMarkup, relationshipMarkup };
   }
-
   function stackFrameRender(frame) {
     const id = frame.__uniqueid;
     const color = getColorForId(id);
@@ -349,7 +348,6 @@ const Dot = (function () {
     const frameMarkup = `"${id}" [${attrs.join(" ")}]`;
     return { id, frameMarkup, references };
   }
-
   function vizStack(stack) {
     const subgraph = [`subgraph cluster_stack_vis {`];
     subgraph.push(`label="Stack";`);
@@ -374,7 +372,6 @@ const Dot = (function () {
     subgraph.push(...edges);
     return subgraph.join("\n");
   }
-
   function vizVariables(objects, enclosed, variables) {
     const subgraph = [`subgraph cluster_variables {`];
     subgraph.push(`label="Variables";`);
@@ -389,7 +386,7 @@ const Dot = (function () {
     variables.keys().forEach((name) => {
       const val = variables.get(name);
 
-      const color = getColorForString(name);
+      const color = getColorForId(name);
 
       const displayName = escape(name);
       const displayTooltip = `Variable ${displayName}`;
@@ -441,7 +438,6 @@ const Dot = (function () {
     subgraph.push(...edges);
     return subgraph.join("\n");
   }
-
   function toDOTMarkup({ objects, enclosed, variables }, stack = []) {
     const subgraphs = [];
     const nodes = [];
@@ -628,6 +624,35 @@ digraph structs {
 }
     `;
   }
+  function getColorForPositiveInteger(id) {
+    return config.colorWheel[id % config.colorWheel.length];
+  }
+  function getColorForString(name) {
+    // hash function can return negative integers
+    const id =
+      ((sdbm(name) % config.colorWheel.length) + config.colorWheel.length) %
+      config.colorWheel.length;
+
+    return getColorForPositiveInteger(id);
+  }
+  function getColorForId(id) {
+    if (Number.isInteger(id)) {
+      return getColorForPositiveInteger(id);
+    }
+    return getColorForString(id);
+  }
+  function sdbm(str) {
+    let arr = str.split("");
+    return arr.reduce(
+      (hashCode, currentVal) =>
+        (hashCode =
+          currentVal.charCodeAt(0) +
+          (hashCode << 6) +
+          (hashCode << 16) -
+          hashCode),
+      0
+    );
+  }
 
   return { toDOTMarkup };
 })();
@@ -680,40 +705,6 @@ const config = {
     "#FF5005",
   ],
 };
-
-function getColorForNumericId(id) {
-  return config.colorWheel[id % config.colorWheel.length];
-}
-
-function getColorForString(name) {
-  // hash function can return negative integers
-  const id =
-    ((sdbm(name) % config.colorWheel.length) + config.colorWheel.length) %
-    config.colorWheel.length;
-
-  return getColorForNumericId(id);
-}
-
-function getColorForId(id) {
-  if (Number.isInteger(id)) {
-    return getColorForNumericId(id);
-  }
-  return getColorForString(id);
-}
-
-// Hashing function to get an integer represnetation of a string
-function sdbm(str) {
-  let arr = str.split("");
-  return arr.reduce(
-    (hashCode, currentVal) =>
-      (hashCode =
-        currentVal.charCodeAt(0) +
-        (hashCode << 6) +
-        (hashCode << 16) -
-        hashCode),
-    0
-  );
-}
 
 // https://en.wikipedia.org/wiki/Help:Distinguishable_colors
 // https://godsnotwheregodsnot.blogspot.com/2012/09/color-distribution-methodology.html
