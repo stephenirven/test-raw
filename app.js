@@ -116,7 +116,19 @@ const Dot = (function () {
     };
   }
   function funcContent(currentObject) {
-    let bodyText = escape(getBodyText(currentObject));
+    const start = state.sourceMapConsumer.originalPositionFor({
+      line: currentObject.bodyLoc.start.line,
+      column: currentObject.bodyLoc.start.column,
+    });
+    const end = state.sourceMapConsumer.originalPositionFor({
+      line: currentObject.bodyLoc.end.line,
+      column: currentObject.bodyLoc.end.column,
+    });
+
+    let bodyText = escape(
+      start && end ? getSourceRange(state.source, start, end) : ""
+    );
+
     if (bodyText.length > 15) {
       bodyText = bodyText.substring(0, 12) + "...";
     }
@@ -653,6 +665,62 @@ digraph structs {
       0
     );
   }
+  function getSourceRange(text, start, end) {
+    if (
+      start.line == null ||
+      start.column == null ||
+      end.line == null ||
+      end.column == null
+    ) {
+      return "";
+    }
+
+    let lines = text.split("\n");
+    lines = lines.slice(start.line - 1, end.line); // positions are 1 indexed. slice end is exclusive
+    lines[0] = lines[0].slice(start.column);
+    lines[lines.length - 1] = lines[lines.length - 1].slice(0, end.column + 1);
+    return lines.join("\n");
+  }
+  function treeHeight(head) {
+    if (head == null) return -1;
+    return Math.max(treeHeight(head.left), treeHeight(head.right)) + 1;
+  }
+  function treeLevels(head, level = 0, levels = []) {
+    if (head == null) return;
+
+    if (!levels[level]) levels[level] = [];
+
+    levels[level].push(head);
+
+    if (head.left != null) treeLevels(head.left, level + 1, levels);
+    if (head.right != null) treeLevels(head.right, level + 1, levels);
+  }
+  class DummyBinaryNode {
+    constructor(node, depth, prefix, dummyNodeNumbers = []) {
+      if (node != null) {
+        this.__uniqueid = node.__uniqueid;
+        this.val = node.val;
+      } else {
+        this.__uniqueid = `d_${prefix}_${dummyNodeNumbers.length}`;
+        dummyNodeNumbers.push(this.__uniqueid);
+      }
+
+      if (depth > 0) {
+        this.left = new DummyBinaryNode(
+          node?.left || null,
+          depth - 1,
+          prefix,
+          dummyNodeNumbers
+        );
+        this.right = new DummyBinaryNode(
+          node?.right || null,
+          depth - 1,
+          prefix,
+          dummyNodeNumbers
+        );
+      }
+    }
+  }
 
   return { toDOTMarkup };
 })();
@@ -705,6 +773,16 @@ const config = {
     "#FF5005",
   ],
 };
+
+function deepEqual(x, y) {
+  const ok = Object.keys,
+    tx = typeof x,
+    ty = typeof y;
+  return x && y && tx === "object" && tx === ty
+    ? ok(x).length === ok(y).length &&
+        ok(x).every((key) => deepEqual(x[key], y[key]))
+    : x === y;
+}
 
 // https://en.wikipedia.org/wiki/Help:Distinguishable_colors
 // https://godsnotwheregodsnot.blogspot.com/2012/09/color-distribution-methodology.html
@@ -759,7 +837,7 @@ class VariableStore {
       const prev = this.prev.objects.get(key);
       const current = this.current.objects.get(key);
 
-      if (!DeepEqual(prev, current)) {
+      if (!deepEqual(prev, current)) {
         return true;
       }
     }
@@ -768,7 +846,7 @@ class VariableStore {
       const prev = this.prev.variables.get(key);
       const current = this.current.variables.get(key);
 
-      if (!DeepEqual(prev, current)) {
+      if (!deepEqual(prev, current)) {
         return true;
       }
     }
@@ -996,7 +1074,7 @@ class StateManager {
     ) {
       return false;
     }
-    return !DeepEqual(this.locations.current.start, this.locations.current.end);
+    return !deepEqual(this.locations.current.start, this.locations.current.end);
   }
   getSourceLines() {
     return [this.locations.current.start.line, this.locations.current.end.line];
@@ -1070,32 +1148,11 @@ async function parseButton() {
   disable("");
 }
 
-function tryStep() {
-  try {
-    var ok = state.interpreter.step();
-    var error;
-  } finally {
-    if (!ok) {
-      if (state.interpreter.value?.stack) {
-        const [message, location] =
-          state.interpreter.value?.stack?.split("at code:");
-
-        const [trans_line, trans_column] = location.split(":").map(Number);
-
-        const errorLocation = state.sourceMapConsumer.originalPositionFor({
-          line: trans_line,
-          column: trans_column,
-        });
-        error = {
-          message: message,
-          location: errorLocation,
-        };
-        console.log("ERROR", error);
-      }
-
-      disable("disabled");
-    }
-    return [ok, error];
+function runButton() {
+  disable("disabled");
+  if (state.interpreter.run()) {
+    // Async function hit.  There's more code to run.
+    setTimeout(runButton, 100);
   }
 }
 
@@ -1136,6 +1193,39 @@ function stepButton() {
     state.highlightErrorLines(error);
     state.displayError(error);
   }
+}
+
+function tryStep() {
+  try {
+    var ok = state.interpreter.step();
+    var error;
+  } finally {
+    if (!ok) {
+      if (state.interpreter.value?.stack) {
+        const [message, location] =
+          state.interpreter.value?.stack?.split("at code:");
+
+        const [trans_line, trans_column] = location.split(":").map(Number);
+
+        const errorLocation = state.sourceMapConsumer.originalPositionFor({
+          line: trans_line,
+          column: trans_column,
+        });
+        error = {
+          message: message,
+          location: errorLocation,
+        };
+        console.log("ERROR", error);
+      }
+
+      disable("disabled");
+    }
+    return [ok, error];
+  }
+}
+
+function disable(disabled) {
+  document.getElementById("stepButton").disabled = disabled;
 }
 
 // Is the current stack at the beginning of a new line?
@@ -1199,18 +1289,6 @@ function isLine(stack) {
   return true;
 }
 isLine.oldStack_ = [];
-
-function runButton() {
-  disable("disabled");
-  if (state.interpreter.run()) {
-    // Async function hit.  There's more code to run.
-    setTimeout(runButton, 100);
-  }
-}
-
-function disable(disabled) {
-  document.getElementById("stepButton").disabled = disabled;
-}
 
 function is2DRectArray(object) {
   if (!(object instanceof Array)) return false;
@@ -1312,36 +1390,6 @@ function buildObjects(input, skipTypes, skipNames, stack = []) {
   return { objects: nativeObjects, enclosed: enclosed };
 }
 
-function getRange(text, start, end) {
-  if (
-    start.line == null ||
-    start.column == null ||
-    end.line == null ||
-    end.column == null
-  ) {
-    return "";
-  }
-
-  let lines = text.split("\n");
-  lines = lines.slice(start.line - 1, end.line); // positions are 1 indexed. slice end is exclusive
-  lines[0] = lines[0].slice(start.column);
-  lines[lines.length - 1] = lines[lines.length - 1].slice(0, end.column + 1);
-  return lines.join("\n");
-}
-
-function getBodyText(nativeObj) {
-  const start = state.sourceMapConsumer.originalPositionFor({
-    line: nativeObj.bodyLoc.start.line,
-    column: nativeObj.bodyLoc.start.column,
-  });
-  const end = state.sourceMapConsumer.originalPositionFor({
-    line: nativeObj.bodyLoc.end.line,
-    column: nativeObj.bodyLoc.end.column,
-  });
-
-  return start && end ? getRange(state.source, start, end) : "";
-}
-
 function getVariables(interpreter, stack) {
   let variables = new Map();
   const skipNames = new Set([
@@ -1383,57 +1431,4 @@ function getVariables(interpreter, stack) {
   }
 
   return { objects, enclosed, variables };
-}
-
-function DeepEqual(x, y) {
-  const ok = Object.keys,
-    tx = typeof x,
-    ty = typeof y;
-  return x && y && tx === "object" && tx === ty
-    ? ok(x).length === ok(y).length &&
-        ok(x).every((key) => DeepEqual(x[key], y[key]))
-    : x === y;
-}
-
-class DummyBinaryNode {
-  constructor(node, depth, prefix, dummyNodeNumbers = []) {
-    if (node != null) {
-      this.__uniqueid = node.__uniqueid;
-      this.val = node.val;
-    } else {
-      this.__uniqueid = `d_${prefix}_${dummyNodeNumbers.length}`;
-      dummyNodeNumbers.push(this.__uniqueid);
-    }
-
-    if (depth > 0) {
-      this.left = new DummyBinaryNode(
-        node?.left || null,
-        depth - 1,
-        prefix,
-        dummyNodeNumbers
-      );
-      this.right = new DummyBinaryNode(
-        node?.right || null,
-        depth - 1,
-        prefix,
-        dummyNodeNumbers
-      );
-    }
-  }
-}
-
-function treeHeight(head) {
-  if (head == null) return -1;
-  return Math.max(treeHeight(head.left), treeHeight(head.right)) + 1;
-}
-
-function treeLevels(head, level = 0, levels = []) {
-  if (head == null) return;
-
-  if (!levels[level]) levels[level] = [];
-
-  levels[level].push(head);
-
-  if (head.left != null) treeLevels(head.left, level + 1, levels);
-  if (head.right != null) treeLevels(head.right, level + 1, levels);
 }
