@@ -1,4 +1,8 @@
-class AdjacencyList extends Object {}
+class AdjacencyList extends Object {
+  constructor(){
+    return({});
+  }
+}
 
 const graph = new AdjacencyList();
 
