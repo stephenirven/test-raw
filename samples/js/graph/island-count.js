@@ -16,9 +16,9 @@ function islandCount(graph) {
   let seen = new Set(); // Set of seen island locations
 
   // loop through the locations in the grid
-  for (let row = 0; row < rowCount; row++) {
-    for (let col = 0; col < colCount; col++) {
-      const current = [row, col];
+  for (let graph_row = 0; graph_row < rowCount; graph_row++) {
+    for (let graph_col = 0; graph_col < colCount; graph_col++) {
+      const current = [graph_row, graph_col];
       // get the size of the island on the current location
       // or zero
       const size = explore(graph, current, seen);
@@ -36,27 +36,27 @@ function explore(graph, location, seen) {
 
   while (queue.length > 0) {
     const current = queue.shift();
-    const [row, col] = current;
+    const [graph_row, graph_col] = current;
 
     // skip this location if we have already seen it
-    if (seen.has(row + "-" + col)) continue;
+    if (seen.has(graph_row + "-" + graph_col)) continue;
     // or if it's out of range
-    if (row < 0) continue;
-    if (col < 0) continue;
-    if (row >= graph.length) continue;
-    if (col >= graph[0].length) continue;
+    if (graph_row < 0) continue;
+    if (graph_col < 0) continue;
+    if (graph_row >= graph.length) continue;
+    if (graph_col >= graph[0].length) continue;
     // or if it isn't part of an islance
-    if (graph[row][col] == 0) continue;
+    if (graph[graph_row][graph_col] == 0) continue;
 
     // increase the size of the current island
     islandSize++;
     // add adjacent squares to the queue
     // it's simpler to apply the checks on dequeue
-    seen.add(row + "-" + col);
-    queue.push([row + 1, col]);
-    queue.push([row - 1, col]);
-    queue.push([row, col + 1]);
-    queue.push([row, col - 1]);
+    seen.add(graph_row + "-" + graph_col);
+    queue.push([graph_row + 1, graph_col]);
+    queue.push([graph_row - 1, graph_col]);
+    queue.push([graph_row, graph_col + 1]);
+    queue.push([graph_row, graph_col - 1]);
   }
   return islandSize;
 }
