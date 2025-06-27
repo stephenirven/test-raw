@@ -1,4 +1,4 @@
-class AdjacencyList extends Object {
+class AdjacencyList{
   constructor(){
     return({});
   }
