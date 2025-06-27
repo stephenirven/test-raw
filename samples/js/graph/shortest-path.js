@@ -1,16 +1,10 @@
-class AdjacencyList{
-  constructor(){
-    return({});
-  }
-}
-
-const graph = new AdjacencyList();
-
-graph.v = ["w", "z"];
-graph.w = ["x", "v"];
-graph.x = ["w", "y"];
-graph.y = ["x", "z"];
-graph.z = ["y", "v"];
+const graph = {
+  v: ["w", "z"],
+  w: ["x", "v"],
+  x: ["w", "y"],
+  y: ["x", "z"],
+  z: ["y", "v"],
+};
 
 function shortestPath(graph, start, end) {
   let distance = 0;
