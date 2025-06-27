@@ -35,8 +35,7 @@ function explore(graph, location, seen) {
   let islandSize = 0;
 
   while (queue.length > 0) {
-    const current = queue.shift();
-    const [graph_row, graph_col] = current;
+    const [graph_row, graph_col] = queue.shift();
 
     // skip this location if we have already seen it
     if (seen.has(graph_row + "-" + graph_col)) continue;
