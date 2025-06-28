@@ -28,7 +28,7 @@ const i = breadthFirstIter(a);
 
 console.log(i);
 
-default class BinaryNode {
+class BinaryNode {
   constructor(val) {
     this.val = val;
     this.left = null;
