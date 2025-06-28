@@ -29,4 +29,5 @@ function shortestPath(graph, start, end) {
   return -1;
 }
 
-console.log(shortestPath(graph, "w", "z"));
+const shortest = shortestPath(graph, "w", "z");
+console.log(shortest);
