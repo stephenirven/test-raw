@@ -30,4 +30,4 @@ function shortestPath(graph, graph_start, graph_end) {
 }
 
 const shortest = shortestPath(graph, "w", "z");
-console.log(shortest);
+console.log("shortest path: ", shortest);
