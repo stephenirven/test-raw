@@ -6,9 +6,9 @@ const graph = {
   z: ["y", "v"],
 };
 
-function shortestPath(graph, start, end) {
+function shortestPath(graph, graph_start, graph_end) {
   let distance = 0;
-  const queue = [{ node: start, distance: distance }];
+  const queue = [{ node: graph_start, distance: distance }];
 
   const seen = new Set();
 
@@ -17,7 +17,7 @@ function shortestPath(graph, start, end) {
     if (seen.has(String(graph_node))) continue;
 
     seen.add(String(graph_node));
-    if (graph_node == end) {
+    if (graph_node == graph_end) {
       return distance;
     }
 
