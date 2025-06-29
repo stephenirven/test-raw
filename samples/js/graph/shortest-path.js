@@ -13,16 +13,16 @@ function shortestPath(graph, start, end) {
   const seen = new Set();
 
   while (queue.length > 0) {
-    const { node, distance } = queue.shift();
-    if (seen.has(String(node))) continue;
+    const { node: graph_node, distance } = queue.shift();
+    if (seen.has(String(graph_node))) continue;
 
-    seen.add(String(node));
-    if (node == end) {
+    seen.add(String(graph_node));
+    if (graph_node == end) {
       return distance;
     }
 
-    for (let neighbour of graph[node]) {
-      queue.push({ node: neighbour, distance: distance + 1 });
+    for (let graph_neighbour of graph[graph_node]) {
+      queue.push({ node: graph_neighbour, distance: distance + 1 });
     }
   }
 
