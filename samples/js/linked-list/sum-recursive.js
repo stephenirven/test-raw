@@ -1,7 +1,3 @@
-/*
- *  Sum a linked list - Iterative method
- */
-
 // Class for linked list nodes
 class Node {
   constructor(val) {
@@ -16,8 +12,7 @@ a.next = new Node(2);
 a.next.next = new Node(3);
 a.next.next.next = new Node(4);
 
-
-function sumRecurse(head, val=0) {
+function sumRecurse(head, val = 0) {
   if (head == null) {
     return val;
   }
@@ -26,4 +21,5 @@ function sumRecurse(head, val=0) {
   return sumRecurse(head, val);
 }
 
-const total = sumRecurse(a)
+const total = sumRecurse(a);
+console.log("Sum is: ", total);
