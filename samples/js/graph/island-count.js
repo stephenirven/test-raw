@@ -23,19 +23,20 @@ function islandCount(graph) {
       // or zero
       const size = explore(graph, current, seen);
       // if there's an island here, add to the total
-      if (size > 0) count++; 
+      if (size > 0) count++;
     }
   }
   return count;
 }
 
 // BFS search for count of attached island grid squares
-function explore(graph, location, seen) {
-  const queue = [location];
+function explore(graph, graph_loc, seen) {
+  const queue = [graph_loc];
   let islandSize = 0;
 
   while (queue.length > 0) {
-    const [graph_row, graph_col] = queue.shift();
+    const graph_current = queue.shift();
+    const [graph_row, graph_col] = graph_current;
 
     // skip this location if we have already seen it
     if (seen.has(graph_row + "-" + graph_col)) continue;
