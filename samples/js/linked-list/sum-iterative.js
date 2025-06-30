@@ -1,7 +1,3 @@
-/*
- *  Sum a linked list - Iterative method
- */
-
 // Class for linked list nodes
 class Node {
   constructor(val) {
@@ -26,5 +22,5 @@ function sumIter(list) {
   return sum;
 }
 
-
-const total = sumIter(a)
+const total = sumIter(a);
+console.log("sum is: ", total);
