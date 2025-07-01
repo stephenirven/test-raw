@@ -45,7 +45,7 @@ function explore(graph, graph_loc, seen) {
     if (graph_col < 0) continue;
     if (graph_row >= graph.length) continue;
     if (graph_col >= graph[0].length) continue;
-    // or if it isn't part of an islance
+    // or if it isn't part of an island
     if (graph[graph_row][graph_col] == 0) continue;
 
     // increase the size of the current island
